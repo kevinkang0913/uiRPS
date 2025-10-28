@@ -10,9 +10,19 @@
   </ul>
 
   <div class="p-3 small text-uppercase text-white-50 mt-3">Master Data</div>
-  <ul class="nav nav-pills flex-column px-2 gap-1">
-    <li class="nav-item"><a href="#" class="nav-link text-start"><i class="bi bi-book me-2"></i>Courses</a></li>
-    <li class="nav-item"><a href="#" class="nav-link text-start"><i class="bi bi-calendar2-week me-2"></i>Semesters</a></li>
-    <li class="nav-item"><a href="#" class="nav-link text-start"><i class="bi bi-people me-2"></i>Users</a></li>
-  </ul>
+<ul class="nav nav-pills flex-column px-2 gap-1">
+    <li class="nav-item">
+        <a href="{{ route('roles.index') }}" 
+           class="nav-link text-start {{ request()->routeIs('roles.*') ? 'active' : '' }}">
+            <i class="bi bi-shield-lock me-2"></i> Roles
+        </a>
+    </li>
+    <li class="nav-item">
+        <a href="{{ route('users.roles.edit', Auth::user()->id) }}" 
+           class="nav-link text-start">
+            <i class="bi bi-person-gear me-2"></i> Assign Roles
+        </a>
+    </li>
+</ul>
+
 </aside>

@@ -1,27 +1,92 @@
-<nav class="navbar navbar-expand-lg navbar-dark brandbar fixed-top shadow-sm">
-  <div class="container-fluid px-4">
-    <div class="d-flex align-items-center gap-3">
-      <div class="logo-circle">U</div>
-      <span class="brand">UPH — RPS Management</span>
-    </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPS System</title>
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
+    <div class="container">
+        <a class="navbar-brand fw-bold" href="{{ url('/') }}">
+            📘 RPS System
+        </a>
 
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#topnav"><span class="navbar-toggler-icon"></span></button>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                data-bs-target="#navbarNav" aria-controls="navbarNav"
+                aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
 
-    <div class="collapse navbar-collapse" id="topnav">
-      <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-3">
-        <li class="nav-item"><a class="nav-link" href="/dashboard"><i class="bi bi-grid-1x2"></i> Dashboard</a></li>
-        <li class="nav-item"><a class="nav-link" href="/rps"><i class="bi bi-journals"></i> RPS</a></li>
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" data-bs-toggle="dropdown">
-            <i class="bi bi-person-circle me-2"></i> John Doe
-          </a>
-          <ul class="dropdown-menu dropdown-menu-end">
-            <li><a class="dropdown-item" href="#">Profile</a></li>
-            <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item" href="/login">Logout</a></li>
-          </ul>
-        </li>
-      </ul>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            {{-- Left side --}}
+            <ul class="navbar-nav me-auto">
+                {{-- Semua role bisa akses RPS --}}
+                <li class="nav-item">
+                    <a class="nav-link {{ request()->is('rps*') ? 'active' : '' }}" href="{{ route('rps.index') }}">
+                        📄 RPS
+                    </a>
+                </li>
+
+                {{-- Hanya CTL --}}
+                @if(Auth::check() && Auth::user()->role === 'ctl')
+                    <li class="nav-item">
+                        <a class="nav-link {{ request()->is('reviews*') ? 'active' : '' }}" href="#">
+                            📝 Review
+                        </a>
+                    </li>
+                @endif
+
+                {{-- Hanya Kaprodi --}}
+                @if(Auth::check() && Auth::user()->role === 'kaprodi')
+                    <li class="nav-item">
+                        <a class="nav-link {{ request()->is('approvals*') ? 'active' : '' }}" href="#">
+                            ✅ Approval
+                        </a>
+                    </li>
+                @endif
+
+                {{-- Hanya Admin --}}
+                @if(Auth::check() && Auth::user()->role === 'admin')
+                    <li class="nav-item">
+                        <a class="nav-link {{ request()->is('users*') ? 'active' : '' }}" href="#">
+                            ⚙️ Manage Users
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {{ request()->is('master*') ? 'active' : '' }}" href="#">
+                            📚 Master Data
+                        </a>
+                    </li>
+                @endif
+            </ul>
+
+            {{-- Right side --}}
+            <ul class="navbar-nav">
+                @auth
+                    <li class="nav-item">
+                        <span class="nav-link">👤 {{ Auth::user()->name }} ({{ ucfirst(Auth::user()->role) }})</span>
+                    </li>
+                    <li class="nav-item">
+                        <form method="POST" action="{{ route('logout') }}">
+                            @csrf
+                            <button type="submit" class="btn btn-link nav-link">Logout</button>
+                        </form>
+                    </li>
+                @else
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ route('login') }}">Login</a>
+                    </li>
+                @endauth
+            </ul>
+        </div>
     </div>
-  </div>
 </nav>
+
+
+    <main class="py-4">
+        @yield('content')
+    </main>
+</body>
+</html>

@@ -1,54 +1,211 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{{ $title ?? 'UPH RPS System' }}</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  {{-- Bootstrap 5 --}}
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  {{-- Bootstrap Icons --}}
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <title>{{ config('app.name', 'RPS System') }}</title>
 
-  <style>
-    :root{
-      --uph-navy:#002b5c;  /* UPH Navy */
-      --uph-gold:#c69214;  /* UPH Gold */
-      --uph-light:#f6f8fc;
-    }
-    body{background:var(--uph-light)}
-    .brandbar{background:var(--uph-navy); color:#fff}
-    .brandbar .brand{
-      font-weight:700; letter-spacing:.3px
-    }
-    .sidebar{
-      width: 260px; background:#0b2a4a; min-height:100vh;
-      position: fixed; top: 56px; left: 0; padding-bottom: 2rem;
-    }
-    .sidebar a{color:#cfe2ff}
-    .sidebar .active, .sidebar a:hover{color:#fff}
-    .content{
-      margin-left: 260px; padding: 24px; margin-top:56px
-    }
-    .btn-gold{background:var(--uph-gold); border-color:var(--uph-gold)}
-    .btn-gold:hover{filter:brightness(.95)}
-    .badge-uph{background:var(--uph-navy)}
-    .card{border:0; box-shadow:0 4px 18px rgba(0,0,0,.06)}
-    .table thead th{background:#f1f3f9}
-    .logo-circle{width:34px; height:34px; border-radius:50%; background:var(--uph-gold); display:inline-grid; place-items:center; color:#111; font-weight:700}
-  </style>
+    {{-- Vite (Breeze) --}}
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+
+    {{-- Bootstrap & Icons --}}
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    {{-- Custom Styles --}}
+    <style>
+        body { background: #f8f9fa; }
+        .brandbar { background-color: #002147; } /* Biru UPH */
+        .logo-circle {
+            width: 36px; height: 36px; border-radius: 50%;
+            background: #fff; color: #002147; display: flex;
+            align-items: center; justify-content: center; font-weight: bold;
+        }
+        .sidebar {
+            width: 240px; height: 100vh; position: fixed; top: 56px; left: 0;
+            background-color: #004080; padding-top: 1rem; overflow-y: auto;
+        }
+        .sidebar .nav-link { color: #fff; border-radius: .375rem; }
+        .sidebar .nav-link.active, .sidebar .nav-link:hover { background-color: #0056b3; }
+        main { margin-left: 240px; padding: 80px 20px 20px; }
+        .avatar-circle {
+            width: 32px; height: 32px; border-radius: 50%;
+            background: #fff; color: #002147; font-weight: bold;
+            display: flex; align-items: center; justify-content: center; font-size: 14px;
+        }
+    </style>
 </head>
 <body>
-  {{-- Top Nav --}}
-  @include('layouts._topnav')
+    {{-- Topbar --}}
+    <nav class="navbar navbar-expand-lg navbar-dark brandbar fixed-top shadow-sm">
+        <div class="container-fluid px-4">
+            {{-- Brand --}}
+            <div class="d-flex align-items-center gap-3">
+                <div class="logo-circle">U</div>
+                <span class="brand fw-bold">UPH — RPS Management</span>
+            </div>
 
-  {{-- Sidebar --}}
-  @include('layouts._sidebar')
+            {{-- User dropdown --}}
+            <ul class="navbar-nav ms-auto">
+                @auth
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown">
+                            <div class="avatar-circle me-2">{{ strtoupper(substr(Auth::user()->name, 0, 1)) }}</div>
+                            <span>{{ Auth::user()->name }} ({{ ucfirst(Auth::user()->role) }})</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li>
+                                <a class="dropdown-item" href="{{ route('profile.edit') }}">
+                                    <i class="bi bi-gear me-2"></i> Profile
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <form method="POST" action="{{ route('logout') }}">
+                                    @csrf
+                                    <button type="submit" class="dropdown-item">
+                                        <i class="bi bi-box-arrow-right me-2"></i> Logout
+                                    </button>
+                                </form>
+                            </li>
+                        </ul>
+                    </li>
+                @else
+                    <li class="nav-item">
+                        <a href="{{ route('login') }}" class="nav-link">
+                            <i class="bi bi-box-arrow-in-right me-2"></i> Login
+                        </a>
+                    </li>
+                @endauth
+            </ul>
+        </div>
+    </nav>
 
-  <main class="content">
-    @yield('content')
-  </main>
+    {{-- Sidebar --}}
+    <aside class="sidebar text-white">
+        <div class="p-3 small text-uppercase text-white-50">Navigation</div>
+        <ul class="nav nav-pills flex-column px-2 gap-1">
+            <li class="nav-item">
+                <a href="{{ route('dashboard') }}"
+                   class="nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}">
+                    <i class="bi bi-grid-1x2 me-2"></i> Dashboard
+                </a>
+            </li>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+            <li class="nav-item">
+                <a href="{{ route('rps.index') }}"
+                   class="nav-link {{ request()->routeIs('rps.*') ? 'active' : '' }}">
+                    <i class="bi bi-journals me-2"></i> RPS
+                </a>
+            </li>
+
+            {{-- CTL only --}}
+            @if(Auth::check() && Auth::user()->role === 'ctl')
+                <li class="nav-item">
+                    <a href="{{ route('reviews.index') }}"
+                       class="nav-link {{ request()->routeIs('reviews.*') ? 'active' : '' }}">
+                        <i class="bi bi-chat-dots me-2"></i> Review
+                    </a>
+                </li>
+            @endif
+
+            {{-- Kaprodi only --}}
+            @if(Auth::check() && Auth::user()->role === 'kaprodi')
+                <li class="nav-item">
+                    <a href="{{ route('approvals.index') }}"
+                       class="nav-link {{ request()->routeIs('approvals.*') ? 'active' : '' }}">
+                        <i class="bi bi-check2-circle me-2"></i> Approval
+                    </a>
+                </li>
+            @endif
+
+            {{-- Admin only --}}
+            @if(Auth::check() && Auth::user()->role === 'admin')
+                <li class="nav-item">
+                    <a href="{{ route('admin.import.courses.form') }}"
+                       class="nav-link {{ request()->routeIs('admin.import.courses.*') ? 'active' : '' }}">
+                        <i class="bi bi-upload me-2"></i> Import Courses
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="{{ route('reports.export') }}"
+                       class="nav-link {{ request()->routeIs('reports.*') ? 'active' : '' }}">
+                        <i class="bi bi-download me-2"></i> Export Laporan
+                    </a>
+                </li>
+
+                <div class="p-3 small text-uppercase text-white-50 mt-3">Master Data</div>
+
+                <li class="nav-item">
+                    <a href="{{ route('faculties.index') }}"
+                       class="nav-link {{ request()->is('faculties*') ? 'active' : '' }}">
+                        <i class="bi bi-buildings me-2"></i> Faculties
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="{{ route('programs.index') }}"
+                       class="nav-link {{ request()->is('programs*') ? 'active' : '' }}">
+                        <i class="bi bi-diagram-3 me-2"></i> Programs
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="{{ route('courses.index') }}"
+                       class="nav-link {{ request()->is('courses*') ? 'active' : '' }}">
+                        <i class="bi bi-journal-text me-2"></i> Courses
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="{{ route('class-sections.index') }}"
+                       class="nav-link {{ request()->is('class-sections*') ? 'active' : '' }}">
+                        <i class="bi bi-collection me-2"></i> Class Sections
+                    </a>
+                </li>
+
+                {{-- Users / Roles (kalau sudah ada) --}}
+                <li class="nav-item">
+                    <a href="{{ route('users.index') }}"
+                       class="nav-link {{ request()->routeIs('users.*') ? 'active' : '' }}">
+                        <i class="bi bi-people me-2"></i> Users
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="{{ route('roles.index') }}"
+                       class="nav-link {{ request()->routeIs('roles.*') ? 'active' : '' }}">
+                        <i class="bi bi-shield-lock me-2"></i> Roles
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="{{ route('users.roles.edit', Auth::user()->id) }}"
+                       class="nav-link">
+                        <i class="bi bi-person-gear me-2"></i> Assign Roles
+                    </a>
+                </li>
+
+                {{-- Activity Logs (opsional) --}}
+                <li class="nav-item">
+                    <a href="{{ route('activity-logs.index') }}"
+                       class="nav-link {{ request()->is('activity-logs*') ? 'active' : '' }}">
+                        <i class="bi bi-activity me-2"></i> Activity Logs
+                    </a>
+                </li>
+            @endif
+        </ul>
+    </aside>
+
+    {{-- Main Content --}}
+    <main>
+        <div class="container-fluid">
+            @if(session('success'))
+                <div class="alert alert-success">{{ session('success') }}</div>
+            @endif
+            @if(session('error'))
+                <div class="alert alert-danger">{{ session('error') }}</div>
+            @endif
+
+            @yield('content')
+        </div>
+    </main>
 </body>
 </html>

@@ -1,50 +1,34 @@
 @extends('layouts.app')
 
 @section('content')
-  @include('partials._page_header', [
-    'title' => 'Submit RPS',
-    'subtitle' => 'Form pengajuan RPS baru'
-  ])
+<div class="container-fluid">
+  <h1 class="mb-4">Buat RPS Baru</h1>
 
-  <div class="card">
-    <div class="card-body">
-      <form>
-        <div class="mb-3">
-          <label class="form-label">Judul RPS</label>
-          <input type="text" class="form-control" placeholder="Masukkan judul RPS">
-        </div>
+  <form action="{{ route('rps.store') }}" method="POST">
+    @csrf
 
-        <div class="mb-3">
-          <label class="form-label">Deskripsi</label>
-          <textarea class="form-control" rows="3" placeholder="Tuliskan deskripsi singkat"></textarea>
-        </div>
+    {{-- Step 1 --}}
+    @include('rps.partials.step1')
 
-        <div class="mb-3">
-          <label class="form-label">Mata Kuliah</label>
-          <select class="form-select">
-            <option>-- Pilih Mata Kuliah --</option>
-            <option>SI1234 - Basis Data</option>
-            <option>SI5678 - Web</option>
-          </select>
-        </div>
+    {{-- Step 2 --}}
+    @include('rps.partials.step2')
 
-        <div class="mb-3">
-          <label class="form-label">Semester</label>
-          <select class="form-select">
-            <option>-- Pilih Semester --</option>
-            <option>2024/2025 - Ganjil</option>
-            <option>2024/2025 - Genap</option>
-          </select>
-        </div>
+    {{-- Step 3 --}}
+    @include('rps.partials.step3')
 
-        <div class="mb-3">
-          <label class="form-label">Upload File</label>
-          <input type="file" class="form-control" accept=".pdf,.doc,.docx">
-        </div>
+    {{-- Step 4 --}}
+    @include('rps.partials.step4')
 
-        <button class="btn btn-gold">Submit</button>
-        <a href="/rps" class="btn btn-secondary">Batal</a>
-      </form>
+    {{-- Step 5 --}}
+    @include('rps.partials.step5')
+
+    {{-- Step 6 --}}
+    @include('rps.partials.step6')
+
+    <div class="mt-3">
+      <button type="submit" class="btn btn-primary">Simpan</button>
+      <a href="{{ route('rps.index') }}" class="btn btn-secondary">Batal</a>
     </div>
-  </div>
+  </form>
+</div>
 @endsection

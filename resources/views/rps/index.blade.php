@@ -1,54 +1,59 @@
 @extends('layouts.app')
 
 @section('content')
-  @include('partials._page_header', [
-    'title' => 'Daftar RPS',
-    'subtitle' => 'Semua RPS yang telah disubmit',
-    'slot' => '<a href="/rps/create" class="btn btn-gold"><i class="bi bi-plus-circle"></i> Submit RPS</a>'
-  ])
+<div class="container">
+  <h1 class="mb-4">Daftar RPS</h1>
 
-  @include('partials._search_filter')
+  {{-- Tombol Buat RPS Baru --}}
+  <a href="{{ route('rps.create') }}" class="btn btn-primary mb-3">
+    + Buat RPS Baru
+  </a>
 
-  <div class="card">
-    <div class="card-body p-0">
-      <table class="table table-hover align-middle mb-0">
-        <thead>
-          <tr>
-            <th>Judul</th>
-            <th>Mata Kuliah</th>
-            <th>Dosen</th>
-            <th>Semester</th>
-            <th>Status</th>
-            <th class="text-end">Aksi</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>RPS Pemrograman Web</td>
-            <td>SI5678 - Web</td>
-            <td>Dr. Clara</td>
-            <td>2024/2025 - Ganjil</td>
-            <td>@include('partials._status_badge', ['status' => 'reviewed'])</td>
-            <td class="text-end">
-              <a href="/rps/3" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
-              <a href="#" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
-              <a href="#" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></a>
-            </td>
-          </tr>
-          <tr>
-            <td>RPS IoT dan Smart Farming</td>
-            <td>SI8765 - IoT</td>
-            <td>Dr. Dani</td>
-            <td>2024/2025 - Genap</td>
-            <td>@include('partials._status_badge', ['status' => 'approved'])</td>
-            <td class="text-end">
-              <a href="/rps/4" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
-              <a href="#" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
-              <a href="#" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></a>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
+  <table class="table table-bordered table-striped">
+    <thead class="table-dark">
+      <tr>
+        <th>#</th>
+        <th>Title</th>
+        <th>Dosen</th>
+        <th>Status</th>
+        <th>Created At</th>
+        <th>Aksi</th>
+      </tr>
+    </thead>
+    <tbody>
+      @forelse($rps as $i => $item)
+        <tr>
+          <td>{{ $i+1 }}</td>
+          <td>{{ $item->title }}</td>
+          <td>{{ $item->lecturer->name ?? '-' }}</td>
+          <td>
+            @if($item->status === 'submitted')
+              <span class="badge bg-info">Submitted</span>
+            @elseif($item->status === 'approved')
+              <span class="badge bg-success">Approved</span>
+            @elseif($item->status === 'rejected')
+              <span class="badge bg-danger">Rejected</span>
+            @else
+              <span class="badge bg-secondary">{{ $item->status }}</span>
+            @endif
+          </td>
+          <td>{{ $item->created_at?->format('d M Y') }}</td>
+          <td>
+            <a href="{{ route('rps.show', $item->id) }}" class="btn btn-info btn-sm">Lihat</a>
+            <a href="{{ route('rps.edit', $item->id) }}" class="btn btn-warning btn-sm">Edit</a>
+            <form action="{{ route('rps.destroy', $item->id) }}" method="POST" class="d-inline">
+              @csrf
+              @method('DELETE')
+              <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Hapus RPS ini?')">Hapus</button>
+            </form>
+          </td>
+        </tr>
+      @empty
+        <tr>
+          <td colspan="6" class="text-center">Belum ada RPS</td>
+        </tr>
+      @endforelse
+    </tbody>
+  </table>
+</div>
 @endsection
