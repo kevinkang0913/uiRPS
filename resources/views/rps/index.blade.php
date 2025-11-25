@@ -1,59 +1,94 @@
+{{-- resources/views/rps/index.blade.php --}}
 @extends('layouts.app')
 
 @section('content')
-<div class="container">
-  <h1 class="mb-4">Daftar RPS</h1>
+<div class="container-xxl">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h4 class="mb-0">Daftar RPS</h4>
+    <a href="{{ route('rps.create.step', 1) }}" class="btn btn-primary">
+      <i class="bi bi-plus-lg me-1"></i> Buat RPS Baru
+    </a>
+  </div>
 
-  {{-- Tombol Buat RPS Baru --}}
-  <a href="{{ route('rps.create') }}" class="btn btn-primary mb-3">
-    + Buat RPS Baru
-  </a>
+  {{-- Toolbar: Search & Filter --}}
+  <form method="GET" class="card border-0 shadow-sm mb-3">
+    <div class="card-body py-3">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-6">
+          <label class="form-label">Cari</label>
+          <input type="text" name="q" class="form-control" placeholder="Judul / Nama atau Kode Mata Kuliah"
+                 value="{{ $filters['q'] ?? '' }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Status</label>
+          <select name="status" class="form-select">
+            @php $s = $filters['status'] ?? ''; @endphp
+            <option value="">Semua</option>
+            <option value="draft"     @selected($s==='draft')>Draft</option>
+            <option value="submitted" @selected($s==='submitted')>Submitted</option>
+            <option value="revisi"    @selected($s==='revisi')>Revisi</option>
+            <option value="forwarded" @selected($s==='forwarded')>Forwarded</option>
+            <option value="approved"  @selected($s==='approved')>Approved</option>
+            <option value="rejected"  @selected($s==='rejected')>Rejected</option>
+          </select>
+        </div>
+        <div class="col-md-3 d-flex gap-2">
+          <button class="btn btn-outline-primary w-100">
+            <i class="bi bi-search me-1"></i> Terapkan
+          </button>
+          <a href="{{ route('rps.index') }}" class="btn btn-outline-secondary">
+            Reset
+          </a>
+        </div>
+      </div>
+    </div>
+  </form>
 
-  <table class="table table-bordered table-striped">
-    <thead class="table-dark">
-      <tr>
-        <th>#</th>
-        <th>Title</th>
-        <th>Dosen</th>
-        <th>Status</th>
-        <th>Created At</th>
-        <th>Aksi</th>
-      </tr>
-    </thead>
-    <tbody>
-      @forelse($rps as $i => $item)
-        <tr>
-          <td>{{ $i+1 }}</td>
-          <td>{{ $item->title }}</td>
-          <td>{{ $item->lecturer->name ?? '-' }}</td>
-          <td>
-            @if($item->status === 'submitted')
-              <span class="badge bg-info">Submitted</span>
-            @elseif($item->status === 'approved')
-              <span class="badge bg-success">Approved</span>
-            @elseif($item->status === 'rejected')
-              <span class="badge bg-danger">Rejected</span>
-            @else
-              <span class="badge bg-secondary">{{ $item->status }}</span>
-            @endif
-          </td>
-          <td>{{ $item->created_at?->format('d M Y') }}</td>
-          <td>
-            <a href="{{ route('rps.show', $item->id) }}" class="btn btn-info btn-sm">Lihat</a>
-            <a href="{{ route('rps.edit', $item->id) }}" class="btn btn-warning btn-sm">Edit</a>
-            <form action="{{ route('rps.destroy', $item->id) }}" method="POST" class="d-inline">
-              @csrf
-              @method('DELETE')
-              <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Hapus RPS ini?')">Hapus</button>
-            </form>
-          </td>
-        </tr>
-      @empty
-        <tr>
-          <td colspan="6" class="text-center">Belum ada RPS</td>
-        </tr>
-      @endforelse
-    </tbody>
-  </table>
+  <div class="card shadow-sm border-0">
+    @if($rpsList->count())
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th style="width:80px">ID</th>
+              <th>Course</th>
+              <th style="width:140px">Status</th>
+              <th style="width:160px">Dibuat</th>
+              <th class="text-end" style="width:120px">Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+          @foreach($rpsList as $item)
+            <tr>
+              <td>#{{ $item->id }}</td>
+              <td>
+                <div class="fw-semibold">{{ $item->course->name ?? ($item->title ?? '-') }}</div>
+                <div class="text-muted small">{{ $item->course->code ?? '—' }}</div>
+              </td>
+              <td>
+                <span class="badge text-bg-secondary text-capitalize">{{ $item->status }}</span>
+              </td>
+              <td>{{ $item->created_at?->format('d M Y') }}</td>
+              <td class="text-end">
+                <a href="{{ route('rps.edit', $item) }}" class="btn btn-sm btn-outline-primary">Edit</a>
+              </td>
+            </tr>
+          @endforeach
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer bg-light">
+        {{ $rpsList->links() }}
+      </div>
+    @else
+      <div class="card-body text-center py-5">
+        <div class="mb-2 fs-5">Belum ada RPS.</div>
+        <div class="text-muted mb-3">Mulai dengan membuat RPS pertama Anda.</div>
+        <a href="{{ route('rps.create.step', 1) }}" class="btn btn-primary">
+          <i class="bi bi-plus-lg me-1"></i> Buat RPS Baru
+        </a>
+      </div>
+    @endif
+  </div>
 </div>
 @endsection

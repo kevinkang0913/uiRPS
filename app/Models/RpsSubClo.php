@@ -6,14 +6,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class RpsSubClo extends Model
 {
-    // 👉 pastikan pakai tabel rps_sub_clos
-    protected $table = 'rps_sub_clos';
+    protected $guarded = [];
 
-    // 👉 kolom FK yang benar adalah outcome_id
-    protected $fillable = ['outcome_id', 'description'];
+    public function outcome(){ return $this->belongsTo(RpsOutcome::class,'outcome_id'); }
 
-    public function outcome()
+    public function scopeOrderByNoNumber($q)
     {
-        return $this->belongsTo(RpsOutcome::class, 'outcome_id');
+        return $q->orderByRaw("
+            CASE WHEN rps_sub_clos.no REGEXP '^[0-9]+$'
+                 THEN CAST(rps_sub_clos.no AS UNSIGNED)
+                 ELSE 999999 END
+        ")->orderBy('rps_sub_clos.no');
     }
 }

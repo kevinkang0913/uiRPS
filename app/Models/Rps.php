@@ -3,80 +3,64 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Rps extends Model
 {
-    protected $fillable = [
-        'lecturer_id',
-        'class_section_id',
-        'title',
-        'description',
-        'status'
-    ];
+    protected $guarded = [];
+    protected $casts = ['lecturers' => 'array'];
 
-    public function lecturer()
+    // Master
+    public function course(): BelongsTo { return $this->belongsTo(Course::class); }
+    public function program(): BelongsTo { return $this->belongsTo(Program::class); }
+
+    // Hierarki outcome
+    public function plos(): HasMany
     {
-        return $this->belongsTo(User::class, 'lecturer_id');
+        return $this->hasMany(RpsPlo::class, 'rps_id')->orderByCodeNumber();
     }
 
-    public function classSection()
+    public function outcomes(): HasMany
     {
-        return $this->belongsTo(ClassSection::class);
+        return $this->hasMany(RpsOutcome::class, 'rps_id')->orderByNoNumber();
     }
 
-    public function plos()
+    public function outcomesFlat()
+    {
+        return $this->hasManyThrough(
+            RpsOutcome::class,
+            RpsPlo::class,
+            'rps_id',   // FK di rps_plos -> rps.id
+            'plo_id',   // FK di rps_outcomes -> rps_plos.id
+            'id',
+            'id'
+        )->orderByNoNumber();
+    }
+
+    // Assessment
+    public function assessmentMappings(): HasMany
+    {
+        return $this->hasMany(RpsAssessmentMapping::class, 'rps_id');
+    }
+
+    public function assessments(): HasMany
+    {
+        return $this->hasMany(RpsAssessment::class, 'rps_id')->orderBy('order_no');
+    }
+    public function references()
 {
-    return $this->hasMany(RpsPlo::class);
+    return $this->hasMany(\App\Models\RpsReference::class, 'rps_id')
+                ->orderBy('type')
+                ->orderBy('order_no');
+}
+public function weeklyPlans()
+{ 
+    return $this->hasMany(\App\Models\RpsWeeklyPlan::class)->orderBy('order_no'); 
+}
+public function evaluations()
+{
+    return $this->hasMany(\App\Models\RpsEvaluation::class)->orderBy('order_no');
 }
 
-public function outcomes()
-{
-    return $this->hasMany(RpsOutcome::class);
-}
-
-public function subClos()
-{
-    return $this->hasManyThrough(
-        RpsSubClo::class,
-        RpsOutcome::class,
-        'rps_id',      // FK di rps_outcomes mengarah ke rps.id
-        'outcome_id',  // FK di rps_sub_clos mengarah ke rps_outcomes.id
-        'id',          // PK di rps
-        'id'           // PK di rps_outcomes
-    );
-}
-public function assessments()
-{
-    return $this->hasMany(RpsAssessment::class);
-}
-public function learningMaterials()
-{
-    return $this->hasMany(RpsLearningMaterial::class);
-}
-
-public function planners()
-{
-    return $this->hasMany(\App\Models\RpsPlanner::class, 'rps_id');
-}
-
-public function contract()
-{
-    return $this->hasOne(RpsContract::class);
-}
-public function reviews()
-{
-    return $this->hasMany(Review::class);
-}
-
-public function approvals()
-{
-    return $this->hasMany(Approval::class);
-}
-
-public function logs()
-{
-    return $this->hasMany(ActivityLog::class);
-}
-
-    // nanti ada relasi ke outcomes, planner, contract, dll.
 }

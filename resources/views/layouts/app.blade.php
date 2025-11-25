@@ -39,14 +39,15 @@
 </head>
 <body>
     {{-- Topbar --}}
-    <nav class="navbar navbar-expand-lg navbar-dark brandbar fixed-top shadow-sm">
-        <div class="container-fluid px-4">
-            {{-- Brand --}}
-            <div class="d-flex align-items-center gap-3">
-                <div class="logo-circle">U</div>
-                <span class="brand fw-bold">UPH — RPS Management</span>
-            </div>
-
+    <nav class="navbar navbar-expand-lg navbar-dark brandbar fixed-top shadow-sm" style="background-color: #003366;">
+  <div class="container-fluid px-4">
+    {{-- Brand --}}
+    <div class="d-flex align-items-center gap-3">
+      <!-- Logo UPH -->
+      <img src="{{ asset('images/logo-uph.png') }}" alt="UPH Logo" style="height:40px; width:auto;">
+      <!-- Teks Brand -->
+      <span class="brand fw-bold text-white">UPH — RPS Management</span>
+    </div>
             {{-- User dropdown --}}
             <ul class="navbar-nav ms-auto">
                 @auth

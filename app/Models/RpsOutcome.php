@@ -6,24 +6,17 @@ use Illuminate\Database\Eloquent\Model;
 
 class RpsOutcome extends Model
 {
-    // 👉 pastikan pakai tabel rps_outcomes
-    protected $table = 'rps_outcomes';
+    protected $guarded = [];
 
-    protected $fillable = ['rps_id', 'plo_id', 'clo'];
+    public function plo(){ return $this->belongsTo(RpsPlo::class,'plo_id'); }
+    public function subClos(){ return $this->hasMany(RpsSubClo::class,'outcome_id')->orderByNoNumber(); }
 
-    public function rps()
+    public function scopeOrderByNoNumber($q)
     {
-        return $this->belongsTo(Rps::class);
-    }
-
-    public function plo()
-    {
-        return $this->belongsTo(RpsPlo::class, 'plo_id');
-    }
-
-    public function subClos()
-    {
-        // 👉 FK di tabel rps_sub_clos adalah outcome_id
-        return $this->hasMany(RpsSubClo::class, 'outcome_id');
+        return $q->orderByRaw("
+            CASE WHEN rps_outcomes.no REGEXP '^[0-9]+$'
+                 THEN CAST(rps_outcomes.no AS UNSIGNED)
+                 ELSE 999999 END
+        ")->orderBy('rps_outcomes.no');
     }
 }
