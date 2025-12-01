@@ -8,13 +8,15 @@
     <div class="alert alert-success">{{ session('success') }}</div>
   @endif
 
-  <table class="table table-bordered table-striped">
+  <table class="table table-bordered table-striped align-middle">
     <thead>
       <tr>
         <th>ID</th>
         <th>Name</th>
         <th>Email</th>
         <th>Roles</th>
+        <th>Faculty</th>
+        <th>Program Studi</th>
         <th>Actions</th>
       </tr>
     </thead>
@@ -25,13 +27,20 @@
         <td>{{ $user->name }}</td>
         <td>{{ $user->email }}</td>
         <td>
-          @foreach($user->roles as $role)
-            <span class="badge bg-primary">{{ $role->name }}</span>
-          @endforeach
+          @forelse($user->roles as $role)
+            <span class="badge bg-primary me-1">{{ $role->name }}</span>
+          @empty
+            <span class="text-muted">–</span>
+          @endforelse
         </td>
-        <td>
+        <td>{{ optional($user->faculty)->name ?? '—' }}</td>
+        <td>{{ optional($user->program)->name ?? '—' }}</td>
+        <td class="d-flex gap-1">
           <a href="{{ route('users.roles.edit',$user->id) }}" class="btn btn-sm btn-warning">
             Assign Roles
+          </a>
+          <a href="{{ route('users.scope.edit',$user->id) }}" class="btn btn-sm btn-outline-primary">
+            Assign Scope Fakultas
           </a>
         </td>
       </tr>

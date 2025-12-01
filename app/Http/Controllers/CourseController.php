@@ -10,35 +10,77 @@ class CourseController extends Controller
 {
     public function index(\Illuminate\Http\Request $request)
 {
+    $user = $request->user();
+
     $q         = trim($request->string('q')->toString());
     $facultyId = $request->integer('faculty_id');
     $programId = $request->integer('program_id');
-    $sort = in_array($request->input('sort'), ['semester','class_number','created_at'])
-            ? $request->input('sort') : 'created_at';
+    $sort      = in_array($request->input('sort'), ['semester','class_number','created_at'])
+                    ? $request->input('sort') : 'created_at';
     $dir       = $request->string('dir') === 'desc' ? 'desc' : 'asc';
     $perPage   = max(5, min((int)$request->integer('per_page') ?: 15, 100));
 
+    // 🔒 Kalau Admin biasa (bukan Super Admin) & punya faculty_id → paksa ke fakultas dia
+    $isFacultyAdmin = $user
+        && $user->hasRole('Admin')
+        && ! $user->hasRole('Super Admin')
+        && $user->faculty_id;
+
+    if ($isFacultyAdmin) {
+        $facultyId = $user->faculty_id; // override semua input faculty_id
+    }
+
     $items = \App\Models\Course::with('program.faculty')
-        ->when($programId, fn($q2)=>$q2->where('program_id',$programId))
-        ->when(!$programId && $facultyId, function($q2) use ($facultyId) {
-            $q2->whereHas('program', fn($w)=>$w->where('faculty_id',$facultyId));
+        // scope berdasarkan fakultas ADMIN (safety tambahan)
+        ->when($isFacultyAdmin, function ($q2) use ($user) {
+            $q2->whereHas('program', fn($w) => $w->where('faculty_id', $user->faculty_id));
         })
-        ->when($q !== '', function($qr) use ($q){
-            $qr->where(function($w) use ($q){
-                $w->where('code','like',"%{$q}%")
-                  ->orWhere('name','like',"%{$q}%")
-                  ->orWhere('catalog_nbr','like',"%{$q}%");
+        // filter program (kalau dipilih)
+        ->when($programId, fn($q2) => $q2->where('program_id', $programId))
+        // kalau tidak ada program tapi ada fakultas → filter via relasi
+        ->when(!$programId && $facultyId, function ($q2) use ($facultyId) {
+            $q2->whereHas('program', fn($w) => $w->where('faculty_id', $facultyId));
+        })
+        // search
+        ->when($q !== '', function ($qr) use ($q) {
+            $qr->where(function ($w) use ($q) {
+                $w->where('code', 'like', "%{$q}%")
+                  ->orWhere('name', 'like', "%{$q}%")
+                  ->orWhere('catalog_nbr', 'like', "%{$q}%");
             });
         })
-        ->orderBy($sort,$dir)
+        ->orderBy($sort, $dir)
         ->paginate($perPage)->withQueryString();
 
-    $faculties = \App\Models\Faculty::orderBy('name')->get(['id','name']);
-    $programs  = \App\Models\Program::when($facultyId, fn($q)=>$q->where('faculty_id',$facultyId))
-                 ->orderBy('name')->get(['id','name','faculty_id']);
+    // 🔽 Dropdown fakultas di filter
+    if ($isFacultyAdmin) {
+        $faculties = \App\Models\Faculty::where('id', $user->faculty_id)
+            ->orderBy('name')
+            ->get(['id','name']);
+    } else {
+        $faculties = \App\Models\Faculty::orderBy('name')->get(['id','name']);
+    }
 
-    return view('master.courses.index', compact('items','faculties','programs','facultyId','programId','q','sort','dir','perPage'));
+    // 🔽 Dropdown program juga di-scope ke fakultas yg aktif
+    $programsQuery = \App\Models\Program::query();
+
+    if ($facultyId) {
+        $programsQuery->where('faculty_id', $facultyId);
+    }
+
+    if ($isFacultyAdmin) {
+        $programsQuery->where('faculty_id', $user->faculty_id);
+    }
+
+    $programs = $programsQuery
+        ->orderBy('name')
+        ->get(['id','name','faculty_id']);
+
+    return view('master.courses.index', compact(
+        'items','faculties','programs','facultyId','programId','q','sort','dir','perPage'
+    ));
 }
+
 
     public function create()
     {

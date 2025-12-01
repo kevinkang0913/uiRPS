@@ -5,9 +5,9 @@
 <div class="container-xxl">
   <div class="d-flex align-items-center justify-content-between mb-3">
     <h4 class="mb-0">Daftar RPS</h4>
-    <a href="{{ route('rps.create.step', 1) }}" class="btn btn-primary">
-      <i class="bi bi-plus-lg me-1"></i> Buat RPS Baru
-    </a>
+    <a href="{{ route('rps.start') }}" class="btn btn-primary">
+  <i class="bi bi-plus-lg me-1"></i> Buat RPS Baru
+</a>
   </div>
 
   {{-- Toolbar: Search & Filter --}}
@@ -54,7 +54,7 @@
               <th>Course</th>
               <th style="width:140px">Status</th>
               <th style="width:160px">Dibuat</th>
-              <th class="text-end" style="width:120px">Aksi</th>
+              <th class="text-end" style="width:160px">Aksi</th>
             </tr>
           </thead>
           <tbody>
@@ -70,7 +70,14 @@
               </td>
               <td>{{ $item->created_at?->format('d M Y') }}</td>
               <td class="text-end">
-                <a href="{{ route('rps.edit', $item) }}" class="btn btn-sm btn-outline-primary">Edit</a>
+                <div class="btn-group">
+                  {{-- Lanjutkan wizard mulai dari Step 1 --}}
+                  <a href="{{ route('rps.resume', [$item, 1]) }}"
+                     class="btn btn-sm btn-outline-primary">
+                    Lanjutkan
+                  </a>
+                  {{-- Kalau nanti mau tambah tombol lain, bisa di sini --}}
+                </div>
               </td>
             </tr>
           @endforeach
@@ -84,9 +91,10 @@
       <div class="card-body text-center py-5">
         <div class="mb-2 fs-5">Belum ada RPS.</div>
         <div class="text-muted mb-3">Mulai dengan membuat RPS pertama Anda.</div>
-        <a href="{{ route('rps.create.step', 1) }}" class="btn btn-primary">
+        <a href="{{ route('rps.start') }}" class="btn btn-primary">
           <i class="bi bi-plus-lg me-1"></i> Buat RPS Baru
         </a>
+
       </div>
     @endif
   </div>

@@ -14,7 +14,12 @@
     <div class="progress-bar bg-primary" style="width:33%"></div>
   </div>
 
-  @if(session('success')) <div class="alert alert-success">{{ session('success') }}</div> @endif
+  @if(session('success'))
+    <div class="alert alert-success">{{ session('success') }}</div>
+  @endif
+  @if(session('error'))
+    <div class="alert alert-danger">{{ session('error') }}</div>
+  @endif
   @if($errors->any())
     <div class="alert alert-danger">
       <b>Periksa input:</b>
@@ -43,7 +48,9 @@
 
     <div class="card-footer bg-light d-flex justify-content-between">
       <a href="{{ route('rps.create.step', 1) }}" class="btn btn-outline-secondary">← Kembali</a>
-      <button type="submit" class="btn btn-primary">Simpan & Lanjut ke Step 3</button>
+      <button type="submit" class="btn btn-primary">
+        Simpan & Lanjut ke Pembobotan CPL–CPMK
+      </button>
     </div>
   </form>
 </div>
@@ -54,7 +61,7 @@ const base = @json($plosSeed ?? []);
 const wrap = document.getElementById('ploWrap');
 document.getElementById('btnAddPlo').addEventListener('click', () => addPloCard({}));
 
-function addPloCard(item) { // ← nama aman, tidak bentrok
+function addPloCard(item){  // nama aman
   const i = wrap.children.length;
   const card = document.createElement('div');
   card.className = 'card border-0 shadow-sm';
@@ -110,17 +117,17 @@ function addPloCard(item) { // ← nama aman, tidak bentrok
 
   const box = document.getElementById('clo-' + i);
   const clos = (item.clos && Array.isArray(item.clos)) ? item.clos : [];
-  if (clos.length) {
-    clos.forEach((o, idx) => box.insertAdjacentHTML('beforeend', cloRow(i, idx, o)));
+  if (clos.length){
+    clos.forEach((o,idx)=> box.insertAdjacentHTML('beforeend', cloRow(i, idx, o)));
   } else {
     addClo(i);
   }
   recalcCpmkTotal();
 }
 
-function cloRow(i, j, o) {
-  o = o || {no: '', description: '', order_no: '', weight_percent: '', subs: []};
-  const subs = (o.subs || []).map((s, k) => subRow(i, j, k, s)).join('');
+function cloRow(i, j, o){
+  o = o || {no:'',description:'',order_no:'',weight_percent:'',subs:[]};
+  const subs = (o.subs || []).map((s,k)=>subRow(i,j,k,s)).join('');
   return `
   <div class="card p-2 clo-card">
     <div class="row g-2 align-items-end">
@@ -162,12 +169,13 @@ function cloRow(i, j, o) {
         </button>
       </div>
     </div>
+
     <div class="mt-2">
       <label class="form-label d-flex justify-content-between">
         <span>sub-CPMK (sub-CLO)</span>
         <button type="button"
                 class="btn btn-sm btn-outline-secondary"
-                onclick="addSub(${i}, ${j})">
+                onclick="addSub(${i},${j})">
           + Tambah sub
         </button>
       </label>
@@ -176,8 +184,8 @@ function cloRow(i, j, o) {
   </div>`;
 }
 
-function subRow(i, j, k, s) {
-  s = s || {no: '', description: '', order_no: ''};
+function subRow(i,j,k,s){
+  s = s || {no:'',description:'',order_no:''};
   return `
   <div class="row g-2">
     <div class="col-md-2">
@@ -203,20 +211,20 @@ function subRow(i, j, k, s) {
   </div>`;
 }
 
-function addClo(i) {
-  const box = document.getElementById('clo-' + i);
+function addClo(i){
+  const box = document.getElementById('clo-'+i);
   const j = box.children.length;
-  box.insertAdjacentHTML('beforeend', cloRow(i, j, {}));
+  box.insertAdjacentHTML('beforeend', cloRow(i,j,{}));
   recalcCpmkTotal();
 }
 
-function addSub(i, j) {
+function addSub(i,j){
   const box = document.getElementById(`subs-${i}-${j}`);
   const k = box.children.length;
-  box.insertAdjacentHTML('beforeend', subRow(i, j, k, {}));
+  box.insertAdjacentHTML('beforeend', subRow(i,j,k,{}));
 }
 
-function autoDistributeCpmkWeights(ploIndex) {
+function autoDistributeCpmkWeights(ploIndex){
   const wrapPlo = document.getElementById('clo-' + ploIndex);
   if (!wrapPlo) return;
 
@@ -225,17 +233,15 @@ function autoDistributeCpmkWeights(ploIndex) {
   if (!n) return;
 
   const val = (100 / n).toFixed(1);
-  inputs.forEach(inp => inp.value = val);
+  inputs.forEach(inp => { inp.value = val; });
   recalcCpmkTotal();
 }
 
-function recalcCpmkTotal() {
+function recalcCpmkTotal(){
   let total = 0;
   document.querySelectorAll('input.clo-weight').forEach(inp => {
     const v = parseFloat(inp.value);
-    if (!isNaN(v)) {
-      total += v;
-    }
+    if (!isNaN(v)) total += v;
   });
 
   const el = document.getElementById('cpmk-weight-total');
@@ -246,7 +252,7 @@ function recalcCpmkTotal() {
 }
 
 // init
-if (Array.isArray(base) && base.length) {
+if (Array.isArray(base) && base.length){
   base.forEach(addPloCard);
 } else {
   addPloCard({});

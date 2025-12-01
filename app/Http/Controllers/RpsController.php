@@ -14,33 +14,64 @@ class RpsController extends Controller
     /* ============================================================
      * INDEX — daftar RPS
      * ============================================================ */
+    public function startNew(Request $request)
+{
+    // Buang RPS yang sebelumnya ada di wizard
+    $request->session()->forget('rps_id');
+
+    // Kalau mau, bisa juga reset flash lain dsb.
+    // $request->session()->forget(['something']);
+
+    return redirect()->route('rps.create.step', 1);
+}
     public function index(Request $request)
-    {
-        $q = Rps::query()
-            ->with(['course:id,name,code'])
-            ->latest();
+{
+    $user = $request->user();
 
-        if ($search = $request->string('q')->toString()) {
-            $q->where(function($w) use ($search) {
-                $w->where('title','like',"%{$search}%")
-                  ->orWhereHas('course', fn($c)=>
-                      $c->where('name','like',"%{$search}%")
-                        ->orWhere('code','like',"%{$search}%"));
-            });
-        }
+    $q = Rps::query()
+        ->with([
+            // supaya bisa dipakai untuk filter & tampilan
+            'course.program.faculty',
+        ])
+        ->latest();
 
-        if ($status = $request->string('status')->toString()) {
-            $q->where('status',$status);
-        }
-
-        return view('rps.index', [
-            'rpsList'=>$q->paginate(12)->withQueryString(),
-            'filters'=>[
-                'q'=>$search ?? '',
-                'status'=>$status ?? '',
-            ],
-        ]);
+    // 🔒 Batasi Admin biasa ke fakultas-nya saja
+    if (
+        $user
+        && $user->hasRole('Admin')
+        && ! $user->hasRole('Super Admin')
+        && $user->faculty_id
+    ) {
+        $q->whereHas('course.program', function ($sub) use ($user) {
+            $sub->where('faculty_id', $user->faculty_id);
+        });
     }
+
+    // 🔍 Filter search (tetap seperti semula)
+    if ($search = $request->string('q')->toString()) {
+        $q->where(function ($w) use ($search) {
+            $w->where('title', 'like', "%{$search}%")
+              ->orWhereHas('course', fn ($c) =>
+                  $c->where('name', 'like', "%{$search}%")
+                    ->orWhere('code', 'like', "%{$search}%")
+              );
+        });
+    }
+
+    // 🎯 Filter status (draft/submitted/etc)
+    if ($status = $request->string('status')->toString()) {
+        $q->where('status', $status);
+    }
+
+    return view('rps.index', [
+        'rpsList' => $q->paginate(12)->withQueryString(),
+        'filters' => [
+            'q'      => $search ?? '',
+            'status' => $status ?? '',
+        ],
+    ]);
+}
+
 
     /* ============================================================
      * CREATE STEP — menampilkan tiap halaman step
@@ -56,11 +87,54 @@ class RpsController extends Controller
         }
 
         /* ---------- STEP 2 ---------- */
-        if ($step === 2) {
-            if (!$rps) return redirect()->route('rps.create.step',1)
-                ->with('error','Mulai dari Step 1 dulu.');
-            return view('rps.steps.outcomes', compact('rps'));
-        }
+        /* ---------- STEP 2 ---------- */
+if ($step === 2) {
+    if (!$rps) {
+        return redirect()->route('rps.create.step', 1)
+            ->with('error','Mulai dari Step 1 dulu.');
+    }
+
+    // Bangun seed dari data CPL → CPMK → subCPMK yang sudah ada di DB
+    $plosSeed = $rps->plos()
+        ->with([
+            'outcomes.subClos' => function($q) {
+                $q->orderBy('no');
+            },
+            'outcomes' => function($q) {
+                $q->orderBy('no');
+            },
+        ])
+        ->orderBy('order_no')
+        ->get()
+        ->map(function($plo){
+            return [
+                'code'        => $plo->code,
+                'description' => $plo->description,
+                'order_no'    => $plo->order_no,
+                'clos'        => $plo->outcomes->map(function($clo){
+                    return [
+                        'no'             => $clo->no,
+                        'description'    => $clo->description,
+                        'order_no'       => $clo->order_no,
+                        'weight_percent' => $clo->weight_percent,
+                        'subs'           => $clo->subClos->map(function($sub){
+                            return [
+                                'no'          => $sub->no,
+                                'description' => $sub->description,
+                                'order_no'    => $sub->order_no,
+                            ];
+                        })->values(),
+                    ];
+                })->values(),
+            ];
+        })->values();
+
+    return view('rps.steps.outcomes', [
+        'rps'      => $rps,
+        'plosSeed' => $plosSeed,
+    ]);
+}
+
 
         /* ---------- STEP 3 ---------- */
         if ($step === 3) {
@@ -161,29 +235,51 @@ if ($step === 6) {
     public function storeStep(Request $request, int $step)
     {
         /* ---------- STEP 1 ---------- */
-        if ($step === 1) {
-            $data = $request->validate([
-                'course_id'     => ['required','integer','exists:courses,id'],
-                'program_id'    => ['required','integer','exists:programs,id'],
-                'academic_year' => ['required','string','max:20'],
-                'semester'      => ['required','integer','min:1','max:14'],
-                'sks'           => ['nullable','integer','min:1','max:10'],
-                'delivery_mode' => ['nullable','string','max:20'],
-                'language'      => ['nullable','string','max:50'],
-                'lecturers'     => ['nullable','array'],
-            ]);
+        /* ---------- STEP 1 ---------- */
+    if ($step === 1) {
+        $data = $request->validate([
+            'course_id'     => ['required','integer','exists:courses,id'],
+            'program_id'    => ['required','integer','exists:programs,id'],
+            'academic_year' => ['required','string','max:20'],
+            'semester'      => ['required','integer','min:1','max:14'],
+            'sks'           => ['nullable','integer','min:1','max:10'],
+            'delivery_mode' => ['nullable','string','max:20'],
+            'language'      => ['nullable','string','max:50'],
 
-            $rps = Rps::find($request->session()->get('rps_id')) ?? new Rps();
-            $rps->fill($data);
-            $rps->status = $rps->status ?? 'draft';
-            $rps->submitted_by = auth()->id();
-            $rps->save();
+            // FIELD BARU STEP 1
+            'class_number'             => ['nullable','string','max:50'],
+            'learning_activity_type'   => ['nullable','in:Kuliah,Seminar,Praktikum,Merdeka Belajar'],
+            'course_category'          => ['nullable','in:MK wajib Universitas,MK wajib Fakultas,MK wajib Prodi,MK pilihan'],
+            'short_description'        => ['nullable','string'],
+            'prerequisite_courses'     => ['nullable','string','max:255'],
+            'prerequisite_for_courses' => ['nullable','string','max:255'],
+            'study_materials'          => ['nullable','string'],
 
-            $request->session()->put('rps_id', $rps->id);
-            return redirect()->route('rps.create.step', 2)
-                ->with('success','Identitas tersimpan. Lanjut ke Step 2.');
+            // Dosen pengampu
+            'lecturers'         => ['nullable','array'],
+            'lecturers.*.name'  => ['nullable','string'],
+            'lecturers.*.email' => ['nullable','email'],
+            'lecturers.*.nidn'  => ['nullable','string'],
+        ]);
+
+        // Rapikan lecturers: buang entri yang nama-nya kosong
+        if (!empty($data['lecturers'])) {
+            $data['lecturers'] = collect($data['lecturers'])
+                ->filter(fn($row) => !empty($row['name']))
+                ->values()
+                ->all();
         }
 
+        $rps = Rps::find($request->session()->get('rps_id')) ?? new Rps();
+        $rps->fill($data);
+        $rps->status = $rps->status ?? 'draft';
+        $rps->submitted_by = auth()->id();
+        $rps->save();
+
+        $request->session()->put('rps_id', $rps->id);
+        return redirect()->route('rps.create.step', 2)
+            ->with('success','Identitas tersimpan. Lanjut ke Step 2.');
+    }
         /* ---------- STEP 2 ---------- */
         if ($step === 2) {
             $rps = Rps::findOrFail($request->session()->get('rps_id'));
@@ -240,54 +336,83 @@ if ($step === 6) {
 
         /* ---------- STEP 3 ---------- */
         if ($step === 3) {
-            $rps = Rps::findOrFail($request->session()->get('rps_id'));
+            $rps  = Rps::findOrFail($request->session()->get('rps_id'));
             $cats = RpsAssessmentCategory::orderBy('order_no')->get(['id']);
+            
+            // ambil CPMK + bobotnya dari Step 2
+            $clos = $rps->outcomesFlat()
+                ->select('rps_outcomes.id', 'rps_outcomes.no', 'rps_outcomes.weight_percent')
+                ->orderBy('rps_outcomes.no')
+                ->get();
 
             $data = $request->validate([
-                'cat_weight'   => ['sometimes','array'],
-                'cat_weight.*' => ['nullable','numeric','min:0','max:100'],
                 'desc'         => ['sometimes','array'],
                 'weights'      => ['sometimes','array'],
                 'weights.*.*'  => ['nullable','numeric','min:0','max:100'],
             ]);
 
-            $sum = 0.0;
+            $weightsInput = $data['weights'] ?? [];
+
+            // 1) HITUNG bobot kategori SECARA OTOMATIS berdasarkan:
+            //    - matriks weights[cat][clo] (kontribusi kategori → CPMK)
+            //    - bobot CPMK (weight_percent) dari Step 2
+            $catWeightsComputed = [];
             foreach ($cats as $cat) {
-                $sum += (float) $request->input("cat_weight.{$cat->id}", 0);
+                $row   = $weightsInput[$cat->id] ?? [];
+                $total = 0.0;
+
+                foreach ($clos as $clo) {
+                    $val = (float)($row[$clo->id] ?? 0);                  // kontribusi 0–100
+                    $total += ($val / 100.0) * (float)($clo->weight_percent ?? 0);
+                }
+
+                $catWeightsComputed[$cat->id] = $total; // dalam persen
             }
+
+            // 2) VALIDASI total bobot kategori (hasil perhitungan) harus ≈ 100%
+            $sum = array_sum($catWeightsComputed);
             if (abs($sum - 100) > 0.001) {
                 return back()->withInput()->withErrors([
-                    'cat_weight' => 'Total bobot kategori harus = 100%. Sekarang: '.number_format($sum,2).'%'
+                    'cat_weight' => 'Total bobot kategori (hasil perhitungan dari CPMK) harus = 100%. Sekarang: '
+                        . number_format($sum, 2) . '%.',
                 ]);
             }
 
+            // 3) SIMPAN bobot kategori (RpsAssessment)
             foreach ($cats as $cat) {
-                $w = (float) $request->input("cat_weight.{$cat->id}", 0);
-                $desc = $request->input("desc.{$cat->id}");
+                $w    = $catWeightsComputed[$cat->id] ?? 0.0;
+                $desc = $data['desc'][$cat->id] ?? null;
+
                 $row = RpsAssessment::firstOrCreate([
-                    'rps_id'=>$rps->id,
-                    'assessment_category_id'=>$cat->id,
+                    'rps_id'                => $rps->id,
+                    'assessment_category_id'=> $cat->id,
                 ]);
-                $row->weight_percent=$w;
-                $row->desc=$desc;
+
+                $row->weight_percent = $w;
+                $row->desc           = $desc;
                 $row->save();
             }
 
+            // 4) SIMPAN matriks mapping kategori → CPMK
             RpsAssessmentMapping::where('rps_id',$rps->id)->delete();
-            foreach ($request->input('weights',[]) as $catId=>$cols) {
-                foreach (($cols ?? []) as $cloId=>$pct) {
+            foreach ($weightsInput as $catId => $cols) {
+                foreach (($cols ?? []) as $cloId => $pct) {
+                    $pct = (float) ($pct ?? 0);
+                    if ($pct <= 0) continue;
+
                     RpsAssessmentMapping::create([
-                        'rps_id'=>$rps->id,
-                        'assessment_category_id'=>(int)$catId,
-                        'outcome_id'=>(int)$cloId,
-                        'percent'=>(float)($pct ?? 0),
+                        'rps_id'                => $rps->id,
+                        'assessment_category_id'=> (int)$catId,
+                        'outcome_id'            => (int)$cloId,
+                        'percent'               => $pct,
                     ]);
                 }
             }
 
             return redirect()->route('rps.create.step', 4)
-                ->with('success','Matriks & bobot kategori tersimpan. Lanjut ke Step 4 (Referensi).');
+                ->with('success','Matriks & bobot kategori (dihitung dari CPMK) tersimpan. Lanjut ke Step 4 (Referensi).');
         }
+
 
         /* ---------- STEP 4 ---------- */
         if ($step === 4) {
@@ -409,6 +534,22 @@ if ($step === 6) {
 }
         abort(404);
     }
+    public function resume(Request $request, Rps $rps, int $step = 1)
+{
+    // Simpan RPS yang mau diedit ke session,
+    // supaya createStep() dan storeStep() tahu sedang mengerjakan RPS mana.
+    $request->session()->put('rps_id', $rps->id);
+
+    // Optional: kalau kamu mau kunci hanya status draft yang boleh diedit:
+    // if ($rps->status !== 'draft') {
+    //     return redirect()->route('rps.index')
+    //         ->with('error', 'RPS dengan status ini tidak dapat diedit.');
+    // }
+
+    // Arahkan ke step yang diminta (1, 2, 3, dst.)
+    return redirect()->route('rps.create.step', $step);
+}
+
     public function editCplCpmk(Rps $rps)
 {
     // CPL (PLO) & CPMK (CLO) yang sudah dibuat di Step 2

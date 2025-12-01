@@ -8,27 +8,60 @@ use Illuminate\Http\Request;
 
 class ProgramController extends Controller
 {
-    public function index(\Illuminate\Http\Request $request)
+   public function index(\Illuminate\Http\Request $request)
 {
-    $q        = trim($request->string('q')->toString());
-    $faculty  = $request->integer('faculty_id');
-    $sort     = in_array($request->string('sort'), ['name','code']) ? $request->string('sort') : 'name';
-    $dir      = $request->string('dir') === 'desc' ? 'desc' : 'asc';
-    $perPage  = max(5, min((int)$request->integer('per_page') ?: 15, 100));
+    $user = $request->user();
+
+    $q       = trim($request->string('q')->toString());
+    $sort    = in_array($request->string('sort'), ['name','code']) ? $request->string('sort') : 'name';
+    $dir     = $request->string('dir') === 'desc' ? 'desc' : 'asc';
+    $perPage = max(5, min((int)$request->integer('per_page') ?: 15, 100));
+
+    // ambil filter fakultas dari request dulu
+    $faculty = $request->integer('faculty_id') ?: null;
+
+    // 🔒 kalau admin biasa (bukan Super Admin) & punya faculty_id → paksa ke fakultas dia
+    if (
+        $user
+        && $user->hasRole('Admin')
+        && ! $user->hasRole('Super Admin')
+        && $user->faculty_id
+    ) {
+        $faculty = $user->faculty_id; // override apapun yang dikirim di query string
+    }
 
     $items = \App\Models\Program::with('faculty')
-        ->when($faculty, fn($q2)=>$q2->where('faculty_id',$faculty))
-        ->when($q !== '', function($qr) use ($q){
-            $qr->where(function($w) use ($q){
-                $w->where('code','like',"%{$q}%")->orWhere('name','like',"%{$q}%");
+        ->when($faculty, fn($q2) => $q2->where('faculty_id', $faculty))
+        ->when($q !== '', function ($qr) use ($q) {
+            $qr->where(function ($w) use ($q) {
+                $w->where('code','like',"%{$q}%")
+                  ->orWhere('name','like',"%{$q}%");
             });
         })
         ->orderBy($sort, $dir)
-        ->paginate($perPage)->withQueryString();
+        ->paginate($perPage)
+        ->withQueryString();
 
-    $faculties = \App\Models\Faculty::orderBy('name')->get(['id','name','code']);
-    return view('master.programs.index', compact('items','faculties','q','faculty','sort','dir','perPage'));
+    // 🔍 daftar fakultas untuk filter di view
+    // admin biasa hanya melihat fakultasnya sendiri di dropdown
+    if (
+        $user
+        && $user->hasRole('Admin')
+        && ! $user->hasRole('Super Admin')
+        && $user->faculty_id
+    ) {
+        $faculties = \App\Models\Faculty::where('id', $user->faculty_id)
+            ->orderBy('name')
+            ->get(['id','name','code']);
+    } else {
+        $faculties = \App\Models\Faculty::orderBy('name')->get(['id','name','code']);
+    }
+
+    return view('master.programs.index', compact(
+        'items','faculties','q','faculty','sort','dir','perPage'
+    ));
 }
+
 
 
     public function create()
