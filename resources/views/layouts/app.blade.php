@@ -109,8 +109,8 @@
             @auth
                 @php $user = auth()->user(); @endphp
 
-                {{-- RPS: Dosen & Super Admin --}}
-                @if($user->hasAnyRole(['Dosen','Super Admin']))
+                {{-- RPS: boleh untuk Dosen, Kaprodi, Admin, CTL, Super Admin --}}
+                @if($user->hasAnyRole(['Dosen','Kaprodi','Admin','CTL','Super Admin']))
                     <li class="nav-item">
                         <a href="{{ route('rps.index') }}"
                            class="nav-link {{ request()->routeIs('rps.*') ? 'active' : '' }}">

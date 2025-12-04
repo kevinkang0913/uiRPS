@@ -5,9 +5,15 @@
 
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="mb-0">Faculties</h3>
-    <a href="{{ route('faculties.create') }}" class="btn btn-primary">
-      <i class="bi bi-plus-lg me-1"></i> New Faculty
-    </a>
+
+    @php $current = auth()->user(); @endphp
+
+    {{-- 🔒 Tombol New Faculty hanya untuk Super Admin --}}
+    @if($current && $current->hasRole('Super Admin'))
+      <a href="{{ route('faculties.create') }}" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-1"></i> New Faculty
+      </a>
+    @endif
   </div>
 
   {{-- Filter Bar --}}
@@ -61,8 +67,8 @@
       <table class="table table-hover align-middle mb-0">
         <thead class="table-light">
           @php
-            $flip = $dir==='asc' ? 'desc' : 'asc';
-            $link = fn($col)=>request()->fullUrlWithQuery(['sort'=>$col,'dir'=>($sort===$col?$flip:'asc')]);
+            $flip  = $dir==='asc' ? 'desc' : 'asc';
+            $link  = fn($col)=>request()->fullUrlWithQuery(['sort'=>$col,'dir'=>($sort===$col?$flip:'asc')]);
             $arrow = fn($col)=> $sort===$col ? ($dir==='asc'?'↑':'↓') : '';
           @endphp
           <tr>
@@ -79,16 +85,21 @@
               <td><code>{{ $f->code }}</code></td>
               <td>{{ $f->name }}</td>
               <td class="text-end">
+                {{-- Edit boleh untuk Super Admin & Admin (backend sudah cek milik siapa) --}}
                 <a href="{{ route('faculties.edit',$f) }}" class="btn btn-sm btn-outline-secondary">
                   <i class="bi bi-pencil"></i>
                 </a>
-                <form action="{{ route('faculties.destroy',$f) }}" method="POST" class="d-inline"
-                      onsubmit="return confirm('Delete this faculty?')">
-                  @csrf @method('DELETE')
-                  <button class="btn btn-sm btn-outline-danger">
-                    <i class="bi bi-trash"></i>
-                  </button>
-                </form>
+
+                {{-- 🔒 Delete hanya untuk Super Admin --}}
+                @if($current && $current->hasRole('Super Admin'))
+                  <form action="{{ route('faculties.destroy',$f) }}" method="POST" class="d-inline"
+                        onsubmit="return confirm('Delete this faculty?')">
+                    @csrf @method('DELETE')
+                    <button class="btn btn-sm btn-outline-danger">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </form>
+                @endif
               </td>
             </tr>
           @empty
@@ -108,6 +119,7 @@
   </div>
 </div>
 @endsection
+
 @push('scripts')
 <script>
 document.querySelectorAll('select[name="faculty_id"], select[name="program_id"], select[name="per_page"]').forEach(el=>{

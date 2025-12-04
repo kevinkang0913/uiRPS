@@ -49,7 +49,16 @@ Route::middleware('auth')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
+    | RPS INDEX — bisa diakses semua user login (Dosen, Kaprodi, Admin, CTL, Super Admin)
+    |           → hak create/edit diatur di group terpisah
+    |--------------------------------------------------------------------------
+    */
+    Route::get('/rps', [RpsController::class, 'index'])->name('rps.index');
+
+    /*
+    |--------------------------------------------------------------------------
     | RPS Wizard (Dosen & Super Admin)
+    |   → hanya mereka yang boleh create / edit RPS
     |--------------------------------------------------------------------------
     */
     Route::middleware('role:Dosen,Super Admin')->group(function () {
@@ -65,9 +74,9 @@ Route::middleware('auth')->group(function () {
             ->name('rps.resume');
 
         /*
-        |----------------------------------------------------------------------
+        |--------------------------------------------------------------------------
         | RPS Wizard (LETakkan di atas resource RPS)
-        |----------------------------------------------------------------------
+        |--------------------------------------------------------------------------
         */
         Route::get('/rps/create/step/{step}', [RpsController::class, 'createStep'])
             ->whereNumber('step')
@@ -77,8 +86,11 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('step')
             ->name('rps.store.step');
 
-        // Resource utama RPS (tanpa create/store/show karena pakai wizard)
-        Route::resource('rps', RpsController::class)->except(['create','store','show']);
+        // Resource utama RPS:
+        //   - TANPA index (sudah didefinisikan bebas di atas)
+        //   - TANPA create/store/show (pakai wizard)
+        Route::resource('rps', RpsController::class)
+            ->except(['index','create','store','show']);
     });
 
     /*
@@ -122,9 +134,9 @@ Route::middleware('auth')->group(function () {
     Route::middleware('role:Admin,Super Admin')->group(function () {
 
         /*
-        |----------------------------------------------------------------------
+        |--------------------------------------------------------------------------
         | Admin – Import & Reports
-        |----------------------------------------------------------------------
+        |--------------------------------------------------------------------------
         */
         Route::get('/admin/import/courses', [ImportController::class, 'showForm'])
             ->name('admin.import.courses.form');
@@ -136,9 +148,9 @@ Route::middleware('auth')->group(function () {
             ->name('reports.export');
 
         /*
-        |----------------------------------------------------------------------
+        |--------------------------------------------------------------------------
         | Master Data (CRUD)
-        |----------------------------------------------------------------------
+        |--------------------------------------------------------------------------
         */
         Route::resource('faculties', FacultyController::class);
         Route::resource('programs', ProgramController::class);
@@ -146,27 +158,25 @@ Route::middleware('auth')->group(function () {
         Route::resource('class-sections', ClassSectionController::class);
 
         /*
-        |----------------------------------------------------------------------
+        |--------------------------------------------------------------------------
         | Users & Roles
-        |----------------------------------------------------------------------
+        |--------------------------------------------------------------------------
         */
-        // Users & Roles
-Route::resource('users', UserController::class)->only(['index']);
-Route::resource('roles', RoleController::class)->except(['show']);
+        Route::resource('users', UserController::class)->only(['index']);
+        Route::resource('roles', RoleController::class)->except(['show']);
 
-// Assign roles
-Route::get('users/{user}/roles', [UserRoleController::class, 'edit'])->name('users.roles.edit');
-Route::post('users/{user}/roles', [UserRoleController::class, 'update'])->name('users.roles.update');
+        // Assign roles
+        Route::get('users/{user}/roles', [UserRoleController::class, 'edit'])->name('users.roles.edit');
+        Route::post('users/{user}/roles', [UserRoleController::class, 'update'])->name('users.roles.update');
 
-// Assign fakultas/prodi (scope)
-Route::get('users/{user}/scope', [UserScopeController::class, 'edit'])->name('users.scope.edit');
-Route::post('users/{user}/scope', [UserScopeController::class, 'update'])->name('users.scope.update');
-
+        // Assign fakultas/prodi (scope)
+        Route::get('users/{user}/scope', [UserScopeController::class, 'edit'])->name('users.scope.edit');
+        Route::post('users/{user}/scope', [UserScopeController::class, 'update'])->name('users.scope.update');
 
         /*
-        |----------------------------------------------------------------------
+        |--------------------------------------------------------------------------
         | Activity Logs
-        |----------------------------------------------------------------------
+        |--------------------------------------------------------------------------
         */
         Route::get('/activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
     });
