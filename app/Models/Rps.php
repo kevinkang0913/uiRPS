@@ -62,5 +62,9 @@ public function evaluations()
 {
     return $this->hasMany(\App\Models\RpsEvaluation::class)->orderBy('order_no');
 }
+public function contract()
+{
+    return $this->hasOne(RpsContract::class);
+}
 
 }

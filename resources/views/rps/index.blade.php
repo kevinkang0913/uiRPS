@@ -3,11 +3,48 @@
 
 @section('content')
 <div class="container-xxl">
+
+  {{-- Custom style badge status pakai warna ala UPH --}}
+  <style>
+    .status-badge {
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 0.3rem 0.85rem;
+      text-transform: capitalize;
+    }
+    /* Palet kira-kira UPH: navy, gold, hijau, merah */
+    .status-badge-draft {
+      background: #e0e4ec;
+      color: #495057;
+    }
+    .status-badge-submitted {
+      background: #003366; /* UPH navy */
+      color: #ffffff;
+    }
+    .status-badge-revisi {
+      background: #ffb347; /* gold-ish */
+      color: #4a2b00;
+    }
+    .status-badge-forwarded {
+      background: #4da3ff; /* light blue */
+      color: #083763;
+    }
+    .status-badge-approved {
+      background: #1b8f3a; /* deep green */
+      color: #ffffff;
+    }
+    .status-badge-rejected {
+      background: #c62828; /* merah */
+      color: #ffffff;
+    }
+  </style>
+
   <div class="d-flex align-items-center justify-content-between mb-3">
     <h4 class="mb-0">Daftar RPS</h4>
     <a href="{{ route('rps.start') }}" class="btn btn-primary">
-  <i class="bi bi-plus-lg me-1"></i> Buat RPS Baru
-</a>
+      <i class="bi bi-plus-lg me-1"></i> Buat RPS Baru
+    </a>
   </div>
 
   {{-- Toolbar: Search & Filter --}}
@@ -16,9 +53,11 @@
       <div class="row g-2 align-items-end">
         <div class="col-md-6">
           <label class="form-label">Cari</label>
-          <input type="text" name="q" class="form-control" placeholder="Judul / Nama atau Kode Mata Kuliah"
+          <input type="text" name="q" class="form-control"
+                 placeholder="Judul / Nama atau Kode Mata Kuliah"
                  value="{{ $filters['q'] ?? '' }}">
         </div>
+
         <div class="col-md-3">
           <label class="form-label">Status</label>
           <select name="status" class="form-select">
@@ -32,6 +71,7 @@
             <option value="rejected"  @selected($s==='rejected')>Rejected</option>
           </select>
         </div>
+
         <div class="col-md-3 d-flex gap-2">
           <button class="btn btn-outline-primary w-100">
             <i class="bi bi-search me-1"></i> Terapkan
@@ -59,42 +99,53 @@
           </thead>
           <tbody>
           @foreach($rpsList as $item)
+            @php
+              $statusClass = 'status-badge-' . ($item->status ?? 'draft');
+            @endphp
             <tr>
               <td>#{{ $item->id }}</td>
+
               <td>
-                <div class="fw-semibold">{{ $item->course->name ?? ($item->title ?? '-') }}</div>
-                <div class="text-muted small">{{ $item->course->code ?? '—' }}</div>
-              </td>
-              <td>
-                <span class="badge text-bg-secondary text-capitalize">{{ $item->status }}</span>
-              </td>
-              <td>{{ $item->created_at?->format('d M Y') }}</td>
-              <td class="text-end">
-                <div class="btn-group">
-                  {{-- Lanjutkan wizard mulai dari Step 1 --}}
-                  <a href="{{ route('rps.resume', [$item, 1]) }}"
-                     class="btn btn-sm btn-outline-primary">
-                    Lanjutkan
-                  </a>
-                  {{-- Kalau nanti mau tambah tombol lain, bisa di sini --}}
+                <div class="fw-semibold">
+                  {{ $item->course->name ?? ($item->title ?? '-') }}
                 </div>
+                <div class="text-muted small">
+                  {{ $item->course->code ?? '—' }}
+                </div>
+              </td>
+
+              <td>
+                <span class="status-badge {{ $statusClass }}">
+                  {{ $item->status ?? 'draft' }}
+                </span>
+              </td>
+
+              <td>{{ $item->created_at?->format('d M Y') }}</td>
+
+              <td class="text-end">
+                <a href="{{ route('rps.resume', [$item, 1]) }}"
+                   class="btn btn-sm btn-outline-primary">
+                  Lanjutkan
+                </a>
               </td>
             </tr>
           @endforeach
           </tbody>
         </table>
       </div>
+
       <div class="card-footer bg-light">
         {{ $rpsList->links() }}
       </div>
     @else
       <div class="card-body text-center py-5">
         <div class="mb-2 fs-5">Belum ada RPS.</div>
-        <div class="text-muted mb-3">Mulai dengan membuat RPS pertama Anda.</div>
+        <div class="text-muted mb-3">
+          Mulai dengan membuat RPS pertama Anda.
+        </div>
         <a href="{{ route('rps.start') }}" class="btn btn-primary">
           <i class="bi bi-plus-lg me-1"></i> Buat RPS Baru
         </a>
-
       </div>
     @endif
   </div>

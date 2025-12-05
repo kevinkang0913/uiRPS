@@ -334,14 +334,86 @@ if ($step === 5) {
     return view('rps.steps.evaluations', compact('rps','cats','assess','existing'));
 }
 */
-/* ---------- STEP 6 (RPM) ---------- */
+/* ---------- STEP 5 (CREATE) ---------- */
 if ($step === 5) {
-    $rps = Rps::findOrFail($request->session()->get('rps_id'));
-    $clos = $rps->outcomes()->orderBy('order_no')->get(['id','no','description']);
-    $weeks = $rps->weeklyPlans()->with('outcomes:id')->get();
+    $rpsId = $request->session()->get('rps_id');
+    $rps   = Rps::findOrFail($rpsId);
 
-    return view('rps.steps.weekly', compact('rps','clos','weeks'));
+    // Semua Sub-CPMK untuk dropdown
+    $subClos = \App\Models\RpsSubClo::where('rps_id', $rps->id)
+        ->with(['outcome' => function($q){
+            $q->select('id','no');
+        }])
+        ->orderBy('outcome_id')
+        ->orderBy('no')
+        ->get();
+
+    // Referensi (Step 4) untuk dropdown
+    $refs = $rps->references()
+        ->orderBy('type')
+        ->orderBy('order_no')
+        ->get();
+
+    // Ambil RPM lama: 1 row = 1 Sub-CPMK pada suatu minggu
+    $plans = $rps->weeklyPlans()
+        ->with(['subClo.outcome','reference'])
+        ->orderBy('week_no')
+        ->orderBy('order_no')
+        ->get();
+
+    // Grup per week_no (kalau mau lebih granular bisa: groupBy([week_no, session_no]))
+    $weeks = $plans->groupBy('week_no')->map(function($rows, $weekNo){
+        $first = $rows->first();
+
+        return [
+            'week_no'               => (int)$weekNo,
+            'session_no'            => $first->session_no,
+            'topic'                 => $first->topic,
+            'indicator'             => $first->indicator,
+            'assessment_technique'  => $first->assessment_technique,
+            'assessment_criteria'   => $first->assessment_criteria,
+            'learning_in'           => $first->learning_in,
+            'learning_online'       => $first->learning_online,
+            'reference_id'          => $first->reference_id,
+            'weight_total'          => (float)$rows->sum('weight_percent'),
+            'sub_clos'              => $rows->pluck('sub_clo_id')->all(), // daftar ID untuk dropdown bawah
+        ];
+    })->values();
+
+    return view('rps.steps.weekly', [
+        'rps'     => $rps,
+        'subClos' => $subClos,
+        'refs'    => $refs,
+        'weeks'   => $weeks,
+    ]);
 }
+// ---------- STEP 6 (CREATE) ----------
+if ($step === 6) {
+
+    $rps = Rps::findOrFail($request->session()->get('rps_id'));
+    $contract = $rps->contract; // bisa null
+
+    // Placeholder saja, tidak disimpan
+    $placeholderClassPolicy = <<<TXT
+• Mahasiswa diharapkan mengikuti kegiatan perkuliahan sepenuhnya.
+• Ketidakhadiran harus dikomunikasikan kepada dosen/PIC.
+• Mahasiswa wajib mengikuti aturan kelas selama proses belajar.
+TXT;
+
+    $placeholderContract = <<<TXT
+Saya menyatakan telah membaca dan memahami RPS, serta bersedia mengikuti
+kontrak perkuliahan selama semester berlangsung.
+TXT;
+
+    return view('rps.steps.contract', [
+        'rps'                  => $rps,
+        'contract'             => $contract,
+        'placeholderClass'     => $placeholderClassPolicy,
+        'placeholderContract'  => $placeholderContract,
+    ]);
+}
+
+
         abort(404);
     }
 
@@ -802,52 +874,140 @@ if ($step === 5) {
         ->with('success','Rencana Penilaian tersimpan. Lanjut ke Step 6 (RPM).');
 }
 */
-/* ---------- STEP 6 (RPM) ---------- */
+/* ---------- STEP 5 ---------- */
+/* ---------- STEP 5 ---------- */
 if ($step === 5) {
-    $rps = Rps::findOrFail($request->session()->get('rps_id'));
+    $rpsId = $request->session()->get('rps_id');
+    $rps   = Rps::findOrFail($rpsId);
 
+    // Validasi form
     $data = $request->validate([
-        'weeks'                       => ['required','array','min:1'],
-        'weeks.*.week_no'             => ['required','integer','min:1','max:30'],
-        'weeks.*.topic'               => ['required','string','max:255'],
-        'weeks.*.sub_topics'          => ['nullable','string'],
-        'weeks.*.learning_method'     => ['nullable','string','max:255'],
-        'weeks.*.student_activity'    => ['nullable','string'],
-        'weeks.*.media_tools'         => ['nullable','string','max:255'],
-        'weeks.*.weight_percent'      => ['nullable','numeric','min:0','max:100'],
-        'weeks.*.references'          => ['nullable','string'],
-        'weeks.*.clos'                => ['nullable','array'],
-        'weeks.*.clos.*.id'           => ['required','integer','exists:rps_outcomes,id'],
-        'weeks.*.clos.*.percent'      => ['nullable','numeric','min:0','max:100'],
+        'weeks'                           => ['required','array','min:1'],
+
+        'weeks.*.week_no'                 => ['required','integer','min:1','max:30'],
+        'weeks.*.session_no'              => ['nullable','integer','min:1','max:10'],
+
+        'weeks.*.topic'                   => ['required','string'],
+        'weeks.*.indicator'               => ['nullable','string'],
+        'weeks.*.assessment_technique'    => ['nullable','string','max:100'],
+        'weeks.*.assessment_criteria'     => ['nullable','string'],
+        'weeks.*.learning_in'             => ['nullable','string'],
+        'weeks.*.learning_online'         => ['nullable','string'],
+
+        'weeks.*.reference_id'            => ['nullable','integer','exists:rps_references,id'],
+
+        // daftar Sub-CPMK per minggu (wajib minimal 1)
+        'weeks.*.sub_clos'                => ['required','array','min:1'],
+        'weeks.*.sub_clos.*'              => ['required','integer','exists:rps_sub_clos,id'],
     ]);
 
+    // Hapus RPM lama
     $rps->weeklyPlans()->delete();
 
-    $weekOrder = 1;
-    foreach (array_values($data['weeks']) as $w) {
-        $wp = $rps->weeklyPlans()->create([
-            'week_no'         => (int)$w['week_no'],
-            'topic'           => (string)$w['topic'],
-            'sub_topics'      => $w['sub_topics'] ?? null,
-            'learning_method' => $w['learning_method'] ?? null,
-            'student_activity'=> $w['student_activity'] ?? null,
-            'media_tools'     => $w['media_tools'] ?? null,
-            'weight_percent'  => isset($w['weight_percent']) ? (float)$w['weight_percent'] : 0,
-            'references'      => $w['references'] ?? null,
-            'order_no'        => $weekOrder++,
-        ]);
+    $createdPlans = [];
+    $orderNo      = 1;
 
-        foreach (($w['clos'] ?? []) as $c) {
-            if (empty($c['id'])) continue;
-            $wp->outcomes()->attach(
-                (int)$c['id'],
-                ['percent'=>isset($c['percent']) ? (float)$c['percent'] : 0]
-            );
+    // Flatten: 1 minggu bisa punya banyak Sub-CPMK → 1 row per Sub-CPMK
+    foreach (array_values($data['weeks']) as $week) {
+        $weekNo    = (int)($week['week_no'] ?? 1);
+        $sessionNo = isset($week['session_no']) ? (int)$week['session_no'] : null;
+
+        $topic      = $week['topic'] ?? '';
+        $indicator  = $week['indicator'] ?? null;
+        $tech       = $week['assessment_technique'] ?? null;
+        $criteria   = $week['assessment_criteria'] ?? null;
+        $learnIn    = $week['learning_in'] ?? null;
+        $learnOn    = $week['learning_online'] ?? null;
+        $refId      = !empty($week['reference_id']) ? (int)$week['reference_id'] : null;
+
+        $subClosIds = $week['sub_clos'] ?? [];
+        foreach ($subClosIds as $subId) {
+            $subId = (int)$subId;
+            if (!$subId) continue;
+
+            $plan = $rps->weeklyPlans()->create([
+                'week_no'              => $weekNo,
+                'session_no'           => $sessionNo,
+                'sub_clo_id'           => $subId,
+
+                'topic'                => $topic,
+                'indicator'            => $indicator,
+                'assessment_technique' => $tech,
+                'assessment_criteria'  => $criteria,
+                'learning_in'          => $learnIn,
+                'learning_online'      => $learnOn,
+
+                'reference_id'         => $refId,
+                'weight_percent'       => 0, // dihitung ulang di bawah
+                'order_no'             => $orderNo++,
+            ]);
+
+            $createdPlans[] = $plan;
         }
     }
 
-    return redirect()->route('rps.index')->with('success','RPM tersimpan.');
+    // Hitung bobot otomatis per Sub-CPMK → sebar ke semua minggu yg pakai
+    if (!empty($createdPlans)) {
+        $bySub = [];
+        foreach ($createdPlans as $plan) {
+            if (!$plan->sub_clo_id) continue;
+            $bySub[$plan->sub_clo_id][] = $plan;
+        }
+
+        if (!empty($bySub)) {
+            $subIds = array_keys($bySub);
+
+            $subWeights = \App\Models\RpsSubClo::whereIn('id', $subIds)
+                ->pluck('weight_percent', 'id');
+
+            foreach ($bySub as $subId => $plans) {
+                $global = (float) ($subWeights[$subId] ?? 0);
+                if ($global <= 0) continue;
+
+                $count  = count($plans);
+                $perRow = $global / $count;
+
+                foreach ($plans as $plan) {
+                    $plan->weight_percent = $perRow;
+                    $plan->save();
+                }
+            }
+        }
+    }
+
+    return redirect()->route('rps.create.step', 6)
+        ->with('success','Rencana Pembelajaran Mingguan Berhasil Disimpan. Lanjut ke Step 6 Kontrak.');
 }
+
+// ---------- STEP 6 (STORE) ----------
+if ($step === 6) {
+
+    $rps = Rps::findOrFail($request->session()->get('rps_id'));
+
+    $data = $request->validate([
+        'class_policy'   => ['nullable','string'],
+        'contract_text'  => ['nullable','string'],
+    ]);
+
+    $contract = $rps->contract ?: new \App\Models\RpsContract([
+        'rps_id' => $rps->id,
+    ]);
+
+    $contract->class_policy  = $data['class_policy'] ?? null;
+    $contract->contract_text = $data['contract_text'] ?? null;
+    $contract->save();
+
+    // Step 6 adalah step terakhir → update status RPS
+    $rps->status = 'submitted';
+    $rps->save();
+
+    return redirect()
+        ->route('rps.index')
+        ->with('success', 'Kontrak perkuliahan tersimpan.');
+}
+
+
+
         abort(404);
     }
     public function resume(Request $request, Rps $rps, int $step = 1)

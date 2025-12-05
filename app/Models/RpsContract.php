@@ -6,14 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class RpsContract extends Model
 {
-    protected $fillable = [
-        'rps_id',
-        'attendance_policy',
-        'participation_policy',
-        'late_policy',
-        'grading_policy',
-        'extra_rules',
-    ];
+    protected $table = 'rps_contracts';
+    protected $guarded = [];
 
     public function rps()
     {
