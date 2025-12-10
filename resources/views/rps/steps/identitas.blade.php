@@ -184,9 +184,22 @@
 
     </div>
 
-    <div class="card-footer bg-light d-flex justify-content-end gap-2">
-      <a href="{{ route('rps.index') }}" class="btn btn-outline-secondary">Batal</a>
-      <button class="btn btn-primary">Simpan & Lanjut ke Step 2</button>
+    {{-- FOOTER: prev (kiri) – save & exit (tengah) – next (kanan) --}}
+    <div class="card-footer bg-light d-flex justify-content-between align-items-center">
+      <a href="{{ route('rps.index') }}" class="btn btn-outline-secondary">
+        ← Kembali ke Daftar
+      </a>
+
+      <button type="submit"
+              name="exit_to_index"
+              value="1"
+              class="btn btn-success">
+        Simpan & Kembali ke Daftar
+      </button>
+
+      <button type="submit" class="btn btn-primary">
+        Simpan & Lanjut ke Step 2
+      </button>
     </div>
   </form>
 </div>

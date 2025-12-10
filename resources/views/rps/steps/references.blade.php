@@ -63,11 +63,24 @@
       </div>
     </div>
 
-    <div class="card-footer bg-light d-flex justify-content-between">
+    <div class="card-footer bg-light d-flex justify-content-between align-items-center">
+      {{-- Previous --}}
       <a href="{{ route('rps.create.step', 3) }}" class="btn btn-outline-secondary">
-        ← Kembali
+        ← Kembali ke Step 3
       </a>
-      <button class="btn btn-primary">Simpan dan Lanjut ke Rencana Pembelajaran Mingguan</button>
+
+      {{-- Save & Exit --}}
+      <button type="submit"
+              name="exit_to_index"
+              value="1"
+              class="btn btn-success">
+        Simpan & Kembali ke Daftar
+      </button>
+
+      {{-- Next --}}
+      <button type="submit" class="btn btn-primary">
+        Simpan & Lanjut ke Step 5 (Rencana Pembelajaran Mingguan)
+      </button>
     </div>
   </form>
 </div>

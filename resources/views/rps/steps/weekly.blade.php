@@ -52,13 +52,14 @@
                 'learning_online'      => $w['learning_online']      ?? '',
                 'reference_id'         => $w['reference_id']         ?? null,
                 'sub_clos'             => array_values($w['sub_clos'] ?? []),
-                'weight_total'         => null, // backend akan hitung ulang setelah submit; di UI cukup kosong
+                'activities_in'        => $w['activities_in']        ?? [],
+                'activities_online'    => $w['activities_online']    ?? [],
+                'weight_total'         => $w['weight_total']         ?? null,
             ];
         }
     } elseif(isset($weeks) && count($weeks)) {
         // CASE 2: load dari DB (hasil create controller)
         foreach ($weeks as $w) {
-            // $w adalah array: week_no, session_no, topic, ..., reference_id, sub_clos, weight_total
             $formWeeks[] = [
                 'week_no'              => $w['week_no']              ?? null,
                 'session_no'           => $w['session_no']           ?? null,
@@ -70,6 +71,8 @@
                 'learning_online'      => $w['learning_online']      ?? '',
                 'reference_id'         => $w['reference_id']         ?? null,
                 'sub_clos'             => $w['sub_clos']             ?? [],
+                'activities_in'        => $w['activities_in']        ?? [],
+                'activities_online'    => $w['activities_online']    ?? [],
                 'weight_total'         => $w['weight_total']         ?? null,
             ];
         }
@@ -88,9 +91,17 @@
             'learning_online'      => '',
             'reference_id'         => null,
             'sub_clos'             => [],
+            'activities_in'        => [],
+            'activities_online'    => [],
             'weight_total'         => null,
         ];
     }
+
+    $activityTypeOptions = [
+        'KM' => 'Kegiatan Belajar Mandiri / KM',
+        'PB' => 'Pembelajaran Terbimbing / PB',
+        'PT' => 'Penugasan Terstruktur / PT',
+    ];
   @endphp
 
   <form method="POST" action="{{ route('rps.store.step', 5) }}" class="card shadow-sm border-0">
@@ -128,8 +139,27 @@
           @php
             $subSelected = $w['sub_clos'] ?? [];
             if (empty($subSelected)) {
-                // minimal 1 dropdown kosong
-                $subSelected = [null];
+                $subSelected = [null]; // minimal 1 dropdown kosong
+            }
+
+            // Siapkan aktivitas Luring
+            $actsIn = $w['activities_in'] ?? [];
+            if (!is_array($actsIn) || !count($actsIn)) {
+                $actsIn = [[
+                    'type'        => '',
+                    'duration'    => '',
+                    'description' => $w['learning_in'] ?? '',
+                ]];
+            }
+
+            // Siapkan aktivitas Daring
+            $actsOn = $w['activities_online'] ?? [];
+            if (!is_array($actsOn) || !count($actsOn)) {
+                $actsOn = [[
+                    'type'        => '',
+                    'duration'    => '',
+                    'description' => $w['learning_online'] ?? '',
+                ]];
             }
           @endphp
 
@@ -206,26 +236,119 @@
                 </div>
               </div>
 
-              {{-- Baris: Luring, Daring --}}
-              <div class="row g-2 mb-2">
-                <div class="col-md-6">
-                  <label class="form-label small mb-1">Aktivitas Luring</label>
-                  <textarea
-                    name="weeks[{{ $wi }}][learning_in]"
-                    class="form-control form-control-sm"
-                    rows="2">{{ $w['learning_in'] }}</textarea>
+              {{-- AKTIVITAS LURING (multi-aktivitas, full width) --}}
+              <div class="mb-2">
+                <label class="form-label small mb-1">Aktivitas Luring</label>
+                <div class="vstack gap-2 activity-list"
+                     data-week="{{ $wi }}" data-mode="in">
+                  @foreach($actsIn as $ai => $act)
+                    <div class="activity-item row g-2 align-items-start">
+                      <div class="col-md-3">
+                        <select
+                          name="weeks[{{ $wi }}][activities_in][{{ $ai }}][type]"
+                          class="form-select form-select-sm activity-type">
+                          <option value="">— Pilih Tipe —</option>
+                          @foreach($activityTypeOptions as $code => $label)
+                            <option value="{{ $code }}" @selected(($act['type'] ?? '') === $code)>
+                              {{ $label }}
+                            </option>
+                          @endforeach
+                        </select>
+                      </div>
+                      <div class="col-md-2">
+                        <input
+                          type="text"
+                          name="weeks[{{ $wi }}][activities_in][{{ $ai }}][duration]"
+                          class="form-control form-control-sm activity-duration"
+                          value="{{ $act['duration'] ?? '' }}"
+                          placeholder="Durasi (mis. 2×50')">
+                      </div>
+                      <div class="col-md-6">
+                        <textarea
+                          name="weeks[{{ $wi }}][activities_in][{{ $ai }}][description]"
+                          class="form-control form-control-sm activity-desc"
+                          rows="2"
+                          placeholder="Deskripsi aktivitas">{{ $act['description'] ?? '' }}</textarea>
+                      </div>
+                      <div class="col-md-1 d-grid">
+                        <button type="button"
+                                class="btn btn-outline-danger btn-sm btn-remove-activity">
+                          ×
+                        </button>
+                      </div>
+                    </div>
+                  @endforeach
                 </div>
-                <div class="col-md-6">
-                  <label class="form-label small mb-1">Aktivitas Daring</label>
-                  <textarea
-                    name="weeks[{{ $wi }}][learning_online]"
-                    class="form-control form-control-sm"
-                    rows="2">{{ $w['learning_online'] }}</textarea>
-                </div>
+                <button type="button"
+                        class="btn btn-sm btn-outline-primary mt-1 btn-add-activity"
+                        data-week="{{ $wi }}" data-mode="in">
+                  + Tambah Aktivitas Luring
+                </button>
               </div>
 
+              {{-- AKTIVITAS DARING (di bawah luring, full width) --}}
+              <div class="mb-2">
+                <label class="form-label small mb-1">Aktivitas Daring</label>
+                <div class="vstack gap-2 activity-list"
+                     data-week="{{ $wi }}" data-mode="online">
+                  @foreach($actsOn as $ai => $act)
+                    <div class="activity-item row g-2 align-items-start">
+                      <div class="col-md-3">
+                        <select
+                          name="weeks[{{ $wi }}][activities_online][{{ $ai }}][type]"
+                          class="form-select form-select-sm activity-type">
+                          <option value="">— Pilih Tipe —</option>
+                          @foreach($activityTypeOptions as $code => $label)
+                            <option value="{{ $code }}" @selected(($act['type'] ?? '') === $code)>
+                              {{ $label }}
+                            </option>
+                          @endforeach
+                        </select>
+                      </div>
+                      <div class="col-md-2">
+                        <input
+                          type="text"
+                          name="weeks[{{ $wi }}][activities_online][{{ $ai }}][duration]"
+                          class="form-control form-control-sm activity-duration"
+                          value="{{ $act['duration'] ?? '' }}"
+                          placeholder="Durasi (mis. 2×50')">
+                      </div>
+                      <div class="col-md-6">
+                        <textarea
+                          name="weeks[{{ $wi }}][activities_online][{{ $ai }}][description]"
+                          class="form-control form-control-sm activity-desc"
+                          rows="2"
+                          placeholder="Deskripsi aktivitas">{{ $act['description'] ?? '' }}</textarea>
+                      </div>
+                      <div class="col-md-1 d-grid">
+                        <button type="button"
+                                class="btn btn-outline-danger btn-sm btn-remove-activity">
+                          ×
+                        </button>
+                      </div>
+                    </div>
+                  @endforeach
+                </div>
+                <button type="button"
+                        class="btn btn-sm btn-outline-primary mt-1 btn-add-activity"
+                        data-week="{{ $wi }}" data-mode="online">
+                  + Tambah Aktivitas Daring
+                </button>
+              </div>
+
+              {{-- textarea hidden untuk sinkron ke DB lama --}}
+              <textarea
+                name="weeks[{{ $wi }}][learning_in]"
+                class="d-none js-activity-hidden"
+                data-week="{{ $wi }}" data-mode="in">{{ $w['learning_in'] }}</textarea>
+
+              <textarea
+                name="weeks[{{ $wi }}][learning_online]"
+                class="d-none js-activity-hidden"
+                data-week="{{ $wi }}" data-mode="online">{{ $w['learning_online'] }}</textarea>
+
               {{-- Baris: Referensi --}}
-              <div class="row g-2 mb-2">
+              <div class="row g-2 mb-2 mt-3">
                 <div class="col-md-6">
                   <label class="form-label small mb-1">Referensi (dropdown dari Step 4)</label>
                   <select
@@ -284,11 +407,21 @@
 
     </div>
 
-    <div class="card-footer bg-light d-flex justify-content-between">
+    <div class="card-footer bg-light d-flex justify-content-between align-items-center">
       <a href="{{ route('rps.create.step', 4) }}" class="btn btn-outline-secondary">
-        ← Kembali
+        ← Kembali ke Step 4
       </a>
-      <button class="btn btn-primary">Simpan dan Lanjut ke Final Step Kontrak</button>
+
+      <button type="submit"
+              name="exit_to_index"
+              value="1"
+              class="btn btn-success">
+        Simpan & Kembali ke Daftar
+      </button>
+
+      <button class="btn btn-primary">
+        Simpan & Lanjut ke Step 6 (Kontrak Perkuliahan)
+      </button>
     </div>
   </form>
 </div>
@@ -363,24 +496,108 @@
         </div>
       </div>
 
-      <div class="row g-2 mb-2">
-        <div class="col-md-6">
-          <label class="form-label small mb-1">Aktivitas Luring</label>
-          <textarea
-            name="weeks[__WI__][learning_in]"
-            class="form-control form-control-sm"
-            rows="2"></textarea>
+      {{-- AKTIVITAS LURING (baru dibuat) --}}
+      <div class="mb-2">
+        <label class="form-label small mb-1">Aktivitas Luring</label>
+        <div class="vstack gap-2 activity-list"
+             data-week="__WI__" data-mode="in">
+          <div class="activity-item row g-2 align-items-start">
+            <div class="col-md-3">
+              <select
+                name="weeks[__WI__][activities_in][0][type]"
+                class="form-select form-select-sm activity-type">
+                <option value="">— Pilih Tipe —</option>
+                @foreach($activityTypeOptions as $code => $label)
+                  <option value="{{ $code }}">{{ $label }}</option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-2">
+              <input
+                type="text"
+                name="weeks[__WI__][activities_in][0][duration]"
+                class="form-control form-control-sm activity-duration"
+                placeholder="Durasi (mis. 2×50')">
+            </div>
+            <div class="col-md-6">
+              <textarea
+                name="weeks[__WI__][activities_in][0][description]"
+                class="form-control form-control-sm activity-desc"
+                rows="2"
+                placeholder="Deskripsi aktivitas"></textarea>
+            </div>
+            <div class="col-md-1 d-grid">
+              <button type="button"
+                      class="btn btn-outline-danger btn-sm btn-remove-activity">
+                ×
+              </button>
+            </div>
+          </div>
         </div>
-        <div class="col-md-6">
-          <label class="form-label small mb-1">Aktivitas Daring</label>
-          <textarea
-            name="weeks[__WI__][learning_online]"
-            class="form-control form-control-sm"
-            rows="2"></textarea>
-        </div>
+        <button type="button"
+                class="btn btn-sm btn-outline-primary mt-1 btn-add-activity"
+                data-week="__WI__" data-mode="in">
+          + Tambah Aktivitas Luring
+        </button>
       </div>
 
-      <div class="row g-2 mb-2">
+      {{-- AKTIVITAS DARING --}}
+      <div class="mb-2">
+        <label class="form-label small mb-1">Aktivitas Daring</label>
+        <div class="vstack gap-2 activity-list"
+             data-week="__WI__" data-mode="online">
+          <div class="activity-item row g-2 align-items-start">
+            <div class="col-md-3">
+              <select
+                name="weeks[__WI__][activities_online][0][type]"
+                class="form-select form-select-sm activity-type">
+                <option value="">— Pilih Tipe —</option>
+                @foreach($activityTypeOptions as $code => $label)
+                  <option value="{{ $code }}">{{ $label }}</option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-2">
+              <input
+                type="text"
+                name="weeks[__WI__][activities_online][0][duration]"
+                class="form-control form-control-sm activity-duration"
+                placeholder="Durasi (mis. 2×50')">
+            </div>
+            <div class="col-md-6">
+              <textarea
+                name="weeks[__WI__][activities_online][0][description]"
+                class="form-control form-control-sm activity-desc"
+                rows="2"
+                placeholder="Deskripsi aktivitas"></textarea>
+            </div>
+            <div class="col-md-1 d-grid">
+              <button type="button"
+                      class="btn btn-outline-danger btn-sm btn-remove-activity">
+                ×
+              </button>
+            </div>
+          </div>
+        </div>
+        <button type="button"
+                class="btn btn-sm btn-outline-primary mt-1 btn-add-activity"
+                data-week="__WI__" data-mode="online">
+          + Tambah Aktivitas Daring
+        </button>
+      </div>
+
+      {{-- hidden textarea untuk sync ke DB lama --}}
+      <textarea
+        name="weeks[__WI__][learning_in]"
+        class="d-none js-activity-hidden"
+        data-week="__WI__" data-mode="in"></textarea>
+
+      <textarea
+        name="weeks[__WI__][learning_online]"
+        class="d-none js-activity-hidden"
+        data-week="__WI__" data-mode="online"></textarea>
+
+      <div class="row g-2 mb-2 mt-3">
         <div class="col-md-6">
           <label class="form-label small mb-1">Referensi (dropdown dari Step 4)</label>
           <select
@@ -448,7 +665,46 @@
   const btnAddWeek      = document.getElementById('btnAddWeek');
   const tplWeekPane     = document.getElementById('tplWeekPane');
   const tplSubCloRow    = document.getElementById('tplSubCloRow');
+  const tplActivityRow  = document.getElementById('tplActivityRow'); // defined below
+</script>
 
+{{-- Template activity row (untuk JS clone) --}}
+<template id="tplActivityRow">
+  <div class="activity-item row g-2 align-items-start">
+    <div class="col-md-3">
+      <select
+        name="weeks[__WI__][__MODE_KEY__][__AI__][type]"
+        class="form-select form-select-sm activity-type">
+        <option value="">— Pilih Tipe —</option>
+        @foreach($activityTypeOptions as $code => $label)
+          <option value="{{ $code }}">{{ $label }}</option>
+        @endforeach
+      </select>
+    </div>
+    <div class="col-md-2">
+      <input
+        type="text"
+        name="weeks[__WI__][__MODE_KEY__][__AI__][duration]"
+        class="form-control form-control-sm activity-duration"
+        placeholder="Durasi (mis. 2×50')">
+    </div>
+    <div class="col-md-6">
+      <textarea
+        name="weeks[__WI__][__MODE_KEY__][__AI__][description]"
+        class="form-control form-control-sm activity-desc"
+        rows="2"
+        placeholder="Deskripsi aktivitas"></textarea>
+    </div>
+    <div class="col-md-1 d-grid">
+      <button type="button"
+              class="btn btn-outline-danger btn-sm btn-remove-activity">
+        ×
+      </button>
+    </div>
+  </div>
+</template>
+
+<script>
   function getWeekCount() {
     return weekTabs.querySelectorAll('.nav-link').length;
   }
@@ -466,9 +722,8 @@
     });
   }
 
-  // Hitung total bobot per minggu berdasarkan pilihan Sub-CPMK
+  // ====== HITUNG TOTAL BOBOT MINGGU (sub-CPMK) ======
   function recalcAllWeekWeights() {
-    // 1) Hitung usage global per sub_clo_id
     const usage = {};
     document.querySelectorAll('.subclo-item select').forEach(sel => {
       const v = sel.value;
@@ -476,7 +731,6 @@
       usage[v] = (usage[v] || 0) + 1;
     });
 
-    // 2) Hitung bobot per week-pane
     document.querySelectorAll('.week-pane').forEach(pane => {
       let total = 0.0;
 
@@ -498,6 +752,47 @@
     });
   }
 
+  // ====== SYNC AKTIVITAS → textarea hidden (learning_in / learning_online) ======
+  function syncActivitiesFor(week, mode) {
+    const list = document.querySelector('.activity-list[data-week="' + week + '"][data-mode="' + mode + '"]');
+    const hidden = document.querySelector('textarea.js-activity-hidden[data-week="' + week + '"][data-mode="' + mode + '"]');
+    if (!list || !hidden) return;
+
+    const lines = [];
+    list.querySelectorAll('.activity-item').forEach(item => {
+      const typeSel = item.querySelector('.activity-type');
+      const durInp  = item.querySelector('.activity-duration');
+      const descTa  = item.querySelector('.activity-desc');
+
+      const type = typeSel ? typeSel.value.trim() : '';
+      const dur  = durInp ? durInp.value.trim() : '';
+      const desc = descTa ? descTa.value.trim() : '';
+
+      if (!type && !dur && !desc) return;
+
+      let line = '';
+      if (type) {
+        line += '[' + type + '] ';
+      }
+      if (dur) {
+        line += dur + ' — ';
+      }
+      line += desc;
+      lines.push(line.trim());
+    });
+
+    hidden.value = lines.join("\n");
+  }
+
+  function syncAllActivities() {
+    document.querySelectorAll('.activity-list').forEach(list => {
+      const week = list.dataset.week;
+      const mode = list.dataset.mode;
+      syncActivitiesFor(week, mode);
+    });
+  }
+
+  // ====== ADD WEEK ======
   btnAddWeek.addEventListener('click', function () {
     let wi       = getWeekCount();
     let newWeekNo= wi + 1;
@@ -527,6 +822,7 @@
 
     activateTab(wi);
     recalcAllWeekWeights();
+    syncAllActivities();
   });
 
   document.addEventListener('click', function (e) {
@@ -562,20 +858,52 @@
       if (!pane) return;
       const paneId = pane.id;
 
-      // hapus tab
       const tabBtn = weekTabs.querySelector('[data-bs-target="#' + paneId + '"]');
       if (tabBtn) {
         const li = tabBtn.closest('li');
         if (li) li.remove();
       }
 
-      // hapus pane
       pane.remove();
 
       if (getWeekCount() > 0) {
         activateTab(0);
       }
       recalcAllWeekWeights();
+      syncAllActivities();
+    }
+
+    // tambah aktivitas (Luring / Daring)
+    if (e.target.classList.contains('btn-add-activity')) {
+      const week = e.target.getAttribute('data-week');
+      const mode = e.target.getAttribute('data-mode'); // 'in' atau 'online'
+      const list = document.querySelector('.activity-list[data-week="' + week + '"][data-mode="' + mode + '"]');
+      if (!list) return;
+
+      const ai = list.querySelectorAll('.activity-item').length;
+      const modeKey = (mode === 'online') ? 'activities_online' : 'activities_in';
+
+      let htmlRow = document.getElementById('tplActivityRow').innerHTML
+          .replace(/__WI__/g, week)
+          .replace(/__MODE_KEY__/g, modeKey)
+          .replace(/__AI__/g, ai);
+
+      const holder = document.createElement('div');
+      holder.innerHTML = htmlRow.trim();
+      list.appendChild(holder.firstElementChild);
+
+      syncActivitiesFor(week, mode);
+    }
+
+    // hapus aktivitas
+    if (e.target.classList.contains('btn-remove-activity')) {
+      const item = e.target.closest('.activity-item');
+      if (!item) return;
+      const list = item.closest('.activity-list');
+      const week = list.dataset.week;
+      const mode = list.dataset.mode;
+      item.remove();
+      syncActivitiesFor(week, mode);
     }
   });
 
@@ -584,10 +912,29 @@
     if (e.target.closest('.subclo-item') && e.target.tagName === 'SELECT') {
       recalcAllWeekWeights();
     }
+
+    if (e.target.closest('.activity-item')) {
+      const list = e.target.closest('.activity-list');
+      if (!list) return;
+      const week = list.dataset.week;
+      const mode = list.dataset.mode;
+      syncActivitiesFor(week, mode);
+    }
+  });
+
+  document.addEventListener('input', function(e){
+    if (e.target.closest('.activity-item')) {
+      const list = e.target.closest('.activity-list');
+      if (!list) return;
+      const week = list.dataset.week;
+      const mode = list.dataset.mode;
+      syncActivitiesFor(week, mode);
+    }
   });
 
   // Initial calc (data dari DB / old)
   recalcAllWeekWeights();
+  syncAllActivities();
 </script>
 
 @endsection

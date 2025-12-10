@@ -14,29 +14,60 @@
       text-transform: capitalize;
     }
     /* Palet kira-kira UPH: navy, gold, hijau, merah */
+
+    /* status: draft */
     .status-badge-draft {
       background: #e0e4ec;
       color: #495057;
     }
+    /* status: submitted */
     .status-badge-submitted {
       background: #003366; /* UPH navy */
       color: #ffffff;
     }
-    .status-badge-revisi {
-      background: #ffb347; /* gold-ish */
-      color: #4a2b00;
-    }
-    .status-badge-forwarded {
+    /* status: reviewed (sudah diforward CTL, siap Kaprodi) */
+    .status-badge-reviewed {
       background: #4da3ff; /* light blue */
       color: #083763;
     }
+    /* status: need_revision (diminta revisi CTL / Kaprodi) */
+    .status-badge-need_revision {
+      background: #ffb347; /* gold-ish */
+      color: #4a2b00;
+    }
+    /* status: revision_submitted (revisi sudah dikirim dosen) */
+    .status-badge-revision_submitted {
+      background: #b39ddb; /* ungu lembut, biar beda */
+      color: #2e1a47;
+    }
+    /* status: approved (final kaprodi) */
     .status-badge-approved {
       background: #1b8f3a; /* deep green */
       color: #ffffff;
     }
-    .status-badge-rejected {
+    /* status: not_approved (ditolak kaprodi) */
+    .status-badge-not_approved {
       background: #c62828; /* merah */
       color: #ffffff;
+    }
+
+    /* badge kecil penanda review CTL */
+    .badge-ctl-flag {
+      border-radius: 999px;
+      font-size: 0.7rem;
+      padding: 0.18rem 0.55rem;
+      margin-left: 0.25rem;
+      font-weight: 500;
+    }
+    .badge-ctl-reviewed {
+      background: #e5f6ea;
+      color: #1b8f3a;
+      border: 1px solid #c7e6d0;
+    }
+    .badge-ctl-not-reviewed {
+      background: #f1f3f5;
+      color: #6c757d;
+      border: 1px solid #dde2e6;
     }
   </style>
 
@@ -60,15 +91,16 @@
 
         <div class="col-md-3">
           <label class="form-label">Status</label>
+          @php $s = $filters['status'] ?? ''; @endphp
           <select name="status" class="form-select">
-            @php $s = $filters['status'] ?? ''; @endphp
             <option value="">Semua</option>
-            <option value="draft"     @selected($s==='draft')>Draft</option>
-            <option value="submitted" @selected($s==='submitted')>Submitted</option>
-            <option value="revisi"    @selected($s==='revisi')>Revisi</option>
-            <option value="forwarded" @selected($s==='forwarded')>Forwarded</option>
-            <option value="approved"  @selected($s==='approved')>Approved</option>
-            <option value="rejected"  @selected($s==='rejected')>Rejected</option>
+            <option value="draft"              @selected($s==='draft')>Draft</option>
+            <option value="submitted"          @selected($s==='submitted')>Submitted</option>
+            <option value="reviewed"           @selected($s==='reviewed')>Reviewed (CTL)</option>
+            <option value="need_revision"      @selected($s==='need_revision')>Need Revision</option>
+            <option value="revision_submitted" @selected($s==='revision_submitted')>Revision Submitted</option>
+            <option value="approved"           @selected($s==='approved')>Approved</option>
+            <option value="not_approved"       @selected($s==='not_approved')>Not Approved</option>
           </select>
         </div>
 
@@ -92,7 +124,7 @@
             <tr>
               <th style="width:80px">ID</th>
               <th>Course</th>
-              <th style="width:140px">Status</th>
+              <th style="width:220px">Status</th>
               <th style="width:160px">Dibuat</th>
               <th class="text-end" style="width:160px">Aksi</th>
             </tr>
@@ -100,7 +132,11 @@
           <tbody>
           @foreach($rpsList as $item)
             @php
-              $statusClass = 'status-badge-' . ($item->status ?? 'draft');
+              $status = $item->status ?? 'draft';
+              $statusClass = 'status-badge-' . $status;
+
+              // label rapi (Draft, Need revision, dll)
+              $statusLabel = ucfirst(str_replace('_', ' ', $status));
             @endphp
             <tr>
               <td>#{{ $item->id }}</td>
@@ -116,14 +152,32 @@
 
               <td>
                 <span class="status-badge {{ $statusClass }}">
-                  {{ $item->status ?? 'draft' }}
+                  {{ $statusLabel }}
                 </span>
+
+                {{-- Penanda sudah / belum direview CTL --}}
+                @if($item->is_reviewed_by_ctl)
+                  <span class="badge-ctl-flag badge-ctl-reviewed">
+                    Reviewed CTL
+                  </span>
+                @else
+                  <span class="badge-ctl-flag badge-ctl-not-reviewed">
+                    Belum review CTL
+                  </span>
+                @endif
               </td>
 
               <td>{{ $item->created_at?->format('d M Y') }}</td>
 
               <td class="text-end">
-                <a href="{{ route('rps.resume', [$item, 1]) }}"
+                {{-- Tombol Show --}}
+                <a href="{{ route('rps.show', $item) }}"
+                   class="btn btn-sm btn-outline-secondary">
+                  <i class="bi bi-eye"></i> Lihat
+                </a>
+
+                {{-- Tombol Lanjutkan (resume wizard) --}}
+                <a href="{{ route('rps.resume.auto', $item) }}"
                    class="btn btn-sm btn-outline-primary">
                   Lanjutkan
                 </a>

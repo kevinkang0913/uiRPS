@@ -21,13 +21,13 @@
         margin-bottom: 12px;
     }
 
-    /* CPMK CARD */
+    /* CPMK CARD — biru muda */
     .clo-card {
-        border-left: 4px solid #2e7d32 !important;
-        background: #f3fff5;
+        border-left: 4px solid #1e88e5 !important; /* biru */
+        background: #e3f2fd;                       /* biru muda */
     }
     .clo-header {
-        background: #2e7d32;
+        background: #1e88e5;
         color: white;
         padding: 4px 8px;
         border-radius: 4px;
@@ -37,9 +37,17 @@
         display: inline-block;
     }
 
+    /* SUB-CPMK wrapper — hijau muda */
+    .sub-card {
+        border-left: 4px solid #43a047;   /* hijau */
+        background: #e8f5e9;              /* hijau muda */
+        padding: .75rem .75rem .5rem;
+        border-radius: .6rem;
+    }
+
     /* SUB-CPMK label */
     .sub-header {
-        background: #444;
+        background: #43a047;
         color: #fff;
         padding: 3px 8px;
         border-radius: 4px;
@@ -63,6 +71,44 @@
     .small-hint {
         font-size: 11px;
         color: #666;
+    }
+
+    /* ========== CUSTOM BUTTON COLORS ========== */
+
+    /* Bagi rata CPL (ikut warna CPL) */
+    .btn-plo-distribute {
+        border-color: #003366;
+        color: #003366;
+        background-color: transparent;
+    }
+    .btn-plo-distribute:hover,
+    .btn-plo-distribute:focus {
+        background-color: #003366;
+        color: #fff;
+    }
+
+    /* Bagi rata CPMK (ikut warna CPMK biru) */
+    .btn-clo-distribute {
+        border-color: #1e88e5;
+        color: #1e88e5;
+        background-color: transparent;
+    }
+    .btn-clo-distribute:hover,
+    .btn-clo-distribute:focus {
+        background-color: #1e88e5;
+        color: #fff;
+    }
+
+    /* Bagi rata sub-CPMK (ikut warna hijau) */
+    .btn-sub-distribute {
+        border-color: #43a047;
+        color: #43a047;
+        background-color: transparent;
+    }
+    .btn-sub-distribute:hover,
+    .btn-sub-distribute:focus {
+        background-color: #43a047;
+        color: #fff;
     }
   </style>
 
@@ -103,13 +149,13 @@
         4) Σ bobot <strong>kategori assessment per CPMK = 100%</strong>.
       </p>
 
-      <div class="mb-2 small d-flex align-items-center flex-wrap gap-2">
+      <div class="mb-2 small d-flex align-items-center justify-content-between flex-wrap gap-2">
         <span>
           Total bobot CPL (PLO):
           <span id="cpl-weight-total" class="fw-semibold">0% dari 100%</span>
         </span>
         <button type="button"
-                class="btn btn-sm btn-outline-secondary ms-2"
+                class="btn btn-sm btn-plo-distribute"
                 onclick="autoDistributeCplWeights()">
           Bagi rata bobot CPL (100%)
         </button>
@@ -126,17 +172,29 @@
       </div>
     </div>
 
-    <div class="card-footer bg-light d-flex justify-content-between">
-      <a href="{{ route('rps.create.step', 1) }}" class="btn btn-outline-secondary">← Kembali</a>
+    {{-- FOOTER: prev – save & exit – next --}}
+    <div class="card-footer bg-light d-flex justify-content-between align-items-center">
+      <a href="{{ route('rps.create.step', 1) }}" class="btn btn-outline-secondary">
+        ← Kembali ke Step 1
+      </a>
+
+      <button type="submit"
+              name="exit_to_index"
+              value="1"
+              class="btn btn-success">
+        Simpan & Kembali ke Daftar
+      </button>
+
       <button type="submit" class="btn btn-primary">
-        Simpan & Lanjut ke Step 3 (Assessment Summary)
+        Simpan & Lanjut ke Step 3
       </button>
     </div>
   </form>
 </div>
 
 <script>
-const base = @json($plosSeed ?? []);
+// pakai old('plos', ...) supaya kalau error form tidak ke-reset
+const base = @json(old('plos', $plosSeed ?? []));
 
 // kategori assessment (fix)
 const ASSESS_CATEGORIES = [
@@ -197,11 +255,11 @@ function addPloCard(item){
       </div>
 
       <div class="mt-3">
-        <label class="form-label d-flex justify-content-between align-items-center">
-          <span>CPMK (CLO) di bawah CPL ini</span>
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <span class="form-label mb-0">CPMK (CLO) di bawah CPL ini</span>
           <div class="d-flex gap-2">
             <button type="button"
-                    class="btn btn-sm btn-outline-secondary"
+                    class="btn btn-sm btn-clo-distribute"
                     onclick="autoDistributeCpmkWeights(${i})">
               Bagi rata bobot CPMK (100%)
             </button>
@@ -211,7 +269,7 @@ function addPloCard(item){
               + Tambah CPMK (CLO)
             </button>
           </div>
-        </label>
+        </div>
         <div id="clo-${i}" class="vstack gap-2"></div>
       </div>
     </div>
@@ -293,12 +351,12 @@ function cloRow(i, j, o){
       </div>
     </div>
 
-    <div class="mt-2">
-      <label class="form-label d-flex justify-content-between align-items-center">
+    <div class="mt-2 sub-card">
+      <div class="d-flex justify-content-between align-items-center mb-2">
         <span class="sub-header">sub-CPMK</span>
         <div class="d-flex gap-2">
           <button type="button"
-                  class="btn btn-sm btn-outline-secondary"
+                  class="btn btn-sm btn-sub-distribute"
                   onclick="autoDistributeSubWeights(${i},${j})">
             Bagi rata bobot sub-CPMK (100%)
           </button>
@@ -308,9 +366,9 @@ function cloRow(i, j, o){
             + Tambah sub-CPMK
           </button>
         </div>
-      </label>
+      </div>
       <div id="subs-${i}-${j}" class="vstack gap-2">${subs}</div>
-      <div class="small small-hint">
+      <div class="small small-hint mt-1">
         Total bobot sub-CPMK per CPMK sebaiknya 100% (akan dicek di backend).
       </div>
     </div>

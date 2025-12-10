@@ -11,5 +11,10 @@ class Review extends Model
 
     public function rps() { return $this->belongsTo(Rps::class); }
     public function reviewer() { return $this->belongsTo(User::class, 'reviewer_id'); }
+    public function items()
+{
+    return $this->hasMany(\App\Models\ReviewItem::class, 'review_id');
+}
+
 }
 

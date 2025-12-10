@@ -2,6 +2,7 @@
 @extends('layouts.app')
 
 @section('content')
+
 <div class="container-xxl">
 
     @php
@@ -53,7 +54,7 @@
             background: #999;
         }
 
-        /* input CPMK yg ada nilai */
+        /* input CPMK yg ada nilai (VISUAL GLOBAL) */
         .matrix-input {
             background: #e3ecff;
             border-color: #c0cef8;
@@ -169,10 +170,10 @@
         <div class="card-header bg-white">
             <h5 class="mb-0">Matriks CPMK / sub-CPMK × Kategori Assessment</h5>
             <div class="small-hint mt-1">
-                Semua angka pada tabel di bawah adalah <strong>dalam persen</strong> dan sudah dihitung di
-                Step 2 (CPL → CPMK → sub-CPMK & assessment). Dosen <strong>tidak dapat mengubah</strong>
-                angka di sini; bagian ini hanya ringkasan. Silakan isi <strong>Deskripsi</strong> dan
-                <strong>Due Date</strong> di bagian bawah.
+                Semua angka pada tabel di bawah adalah <strong>dalam persen kontribusi global</strong>
+                terhadap nilai akhir, dihitung dari data Step 2 (CPL → CPMK → sub-CPMK & assessment).
+                Dosen <strong>tidak dapat mengubah</strong> angka di sini; bagian ini hanya ringkasan.
+                Silakan isi <strong>Deskripsi</strong> dan <strong>Due Date</strong> di bagian bawah.
             </div>
         </div>
 
@@ -207,16 +208,31 @@
 
                             @foreach($cats as $cat)
                                 @php
-                                    $valLocal = (float)($matrix[$cat->id][$clo->id] ?? 0);
-                                    $hasValue = $valLocal > 0;
+                                    // persen lokal (0–100 di dalam CPMK)
+                                    $local       = isset($matrix[$cat->id][$clo->id])
+                                        ? (float)$matrix[$cat->id][$clo->id]
+                                        : 0.0;
+
+                                    // bobot CPMK global (mis. 25%)
+                                    $cpmkGlobal  = (float)($clo->weight_percent ?? 0);
+
+                                    // nilai global kategori utk CPMK ini
+                                    $globalValue = ($cpmkGlobal * $local) / 100.0;
+
+                                    $hasValue    = $local > 0 && $cpmkGlobal > 0;
                                 @endphp
                                 <td class="text-end">
+                                    {{-- kirim nilai lokal ke backend (untuk perhitungan di controller) --}}
+                                    <input type="hidden"
+                                           name="weights[{{ $cat->id }}][{{ $clo->id }}]"
+                                           value="{{ $local !== 0.0 ? number_format($local, 2, '.', '') : '' }}">
+
+                                    {{-- tampilkan nilai GLOBAL di UI --}}
                                     @if($hasValue)
                                         <input
-                                            type="number" step="0.01" min="0" max="100"
-                                            name="weights[{{ $cat->id }}][{{ $clo->id }}]"
+                                            type="text"
                                             class="form-control form-control-sm text-end matrix-input"
-                                            value="{{ number_format($valLocal, 2) }}"
+                                            value="{{ number_format($globalValue, 2) }}"
                                             readonly
                                         >
                                     @else
@@ -224,7 +240,7 @@
                                             type="text"
                                             class="form-control form-control-sm text-end matrix-input-empty"
                                             value=""
-                                            disabled
+                                            readonly
                                         >
                                     @endif
                                 </td>
@@ -239,23 +255,31 @@
 
                         {{-- sub-CPMK --}}
                         @foreach($clo->subClos as $sub)
-                            @php
-                                $ratio = 0;
-                                if (!is_null($clo->weight_percent) && $clo->weight_percent > 0) {
-                                    $ratio = (float)($sub->weight_percent ?? 0) / (float)$clo->weight_percent;
-                                }
-                            @endphp
                             <tr class="sub-row">
                                 <td>Sub CPMK {{ $clo->no }}.{{ $sub->no }}</td>
 
                                 @foreach($cats as $cat)
                                     @php
-                                        $valLocal = (float)($matrix[$cat->id][$clo->id] ?? 0);
-                                        $subVal   = $valLocal * $ratio;
-                                        $hasSub   = $subVal > 0;
+                                        // lokal & CPMK global
+                                        $local      = isset($matrix[$cat->id][$clo->id])
+                                            ? (float)$matrix[$cat->id][$clo->id]
+                                            : 0.0;
+                                        $cpmkGlobal = (float)($clo->weight_percent ?? 0);
+
+                                        // kontribusi global kategori di CPMK ini
+                                        $catGlobal = ($cpmkGlobal * $local) / 100.0;
+
+                                        // bagi lagi ke sub-CPMK berdasarkan bobot sub global
+                                        $subGlobal = 0.0;
+                                        if ($cpmkGlobal > 0 && !is_null($sub->weight_percent)) {
+                                            $ratio    = (float)$sub->weight_percent / $cpmkGlobal;
+                                            $subGlobal = $catGlobal * $ratio;
+                                        }
+
+                                        $hasSub = $subGlobal > 0;
                                     @endphp
                                     <td class="text-end {{ $hasSub ? 'sub-cell-has-value' : '' }}">
-                                        {{ $hasSub ? number_format($subVal, 2) : '' }}
+                                        {{ $hasSub ? number_format($subGlobal, 2) : '' }}
                                     </td>
                                 @endforeach
 
@@ -278,12 +302,13 @@
                     </tbody>
 
                     <tfoot>
-                        {{-- TOTAL BOBOT KATEGORI --}}
+                        {{-- TOTAL BOBOT KATEGORI (GLOBAL) --}}
                         <tr class="tfoot-total">
                             <td class="text-end fw-semibold">TOTAL BOBOT KATEGORI</td>
                             @php $sumAllCats = 0; @endphp
                             @foreach($cats as $cat)
                                 @php
+                                    // catWeights sudah berisi bobot GLOBAL kategori (dari Step 2)
                                     $w = (float)($catWeights[$cat->id] ?? 0);
                                     $sumAllCats += $w;
                                 @endphp
@@ -301,6 +326,8 @@
                             <td class="tfoot-label">Deskripsi</td>
                             @foreach($cats as $cat)
                                 @php
+                                    // kalau habis validation error → pakai old()
+                                    // kalau buka ulang RPS → pakai nilai dari DB ($catDesc)
                                     $descVal = old('desc.'.$cat->id, $catDesc[$cat->id] ?? '');
                                 @endphp
                                 <td>
@@ -340,14 +367,24 @@
             </div>
         </div>
 
-        <div class="card-footer bg-light d-flex justify-content-between">
+        {{-- FOOTER: prev – save & exit – next --}}
+        <div class="card-footer bg-light d-flex justify-content-between align-items-center">
             <a href="{{ route('rps.create.step', 2) }}" class="btn btn-outline-secondary">
                 ← Kembali ke Step 2
             </a>
+
+            <button type="submit"
+                    name="exit_to_index"
+                    value="1"
+                    class="btn btn-success">
+                Simpan & Kembali ke Daftar
+            </button>
+
             <button type="submit" class="btn btn-primary">
                 Simpan & Lanjut ke Step 4
             </button>
         </div>
     </form>
+
 </div>
 @endsection

@@ -9,81 +9,207 @@ use App\Models\ReviewItem;
 
 class ReviewController extends Controller
 {
-    public function index()
+    /* ============================================================
+     * INDEX — daftar RPS yang perlu direview CTL
+     * ============================================================ */
+    public function index(Request $request)
     {
-        $rpsList = Rps::where('status','submitted')->with('lecturer','classSection.course')->get();
-        return view('reviews.index', compact('rpsList'));
+        $user = $request->user();
+
+        // Hanya CTL & Super Admin yang boleh ke halaman review
+        abort_unless(
+            $user->hasRole('CTL') || $user->hasRole('Super Admin'),
+            403,
+            'Hanya CTL yang dapat mengakses halaman ini.'
+        );
+
+        $q = Rps::query()
+            ->with(['course.program.faculty'])
+            ->whereIn('status', ['submitted', 'reviewed']) // RPS yang sudah/sedang diajukan
+            ->orderByDesc('submitted_at')
+            ->orderByDesc('created_at');
+
+        // optional search
+        $search = $request->string('q')->toString();
+        if ($search !== '') {
+            $q->where(function ($w) use ($search) {
+                $w->where('academic_year', 'like', "%{$search}%")
+                    ->orWhereHas('course', function ($c) use ($search) {
+                        $c->where('name', 'like', "%{$search}%")
+                          ->orWhere('code', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        $rpsList = $q->paginate(15)->withQueryString();
+
+        return view('reviews.index', [
+            'rpsList' => $rpsList,
+            'search'  => $search,
+        ]);
     }
 
-    public function edit(Rps $rps)
+    /* ============================================================
+     * EDIT — tampilkan form rubric review
+     * ============================================================ */
+    public function edit(Request $request, Rps $rps)
     {
-        abort_unless($rps->status === 'submitted', 403, 'RPS bukan dalam status submitted');
-        $rubric = config('rps_rubric');
-        return view('reviews.edit', compact('rps','rubric'));
+        $user = $request->user();
+
+        abort_unless(
+            $user->hasRole('CTL') || $user->hasRole('Super Admin'),
+            403,
+            'Hanya CTL yang dapat melakukan review.'
+        );
+
+        // RPS yang bisa direview: status submitted / reviewed
+        abort_unless(
+            in_array($rps->status, ['submitted', 'reviewed']),
+            403,
+            'RPS bukan dalam status yang dapat direview.'
+        );
+
+        $rubric = config('rps_rubric'); // sudah kamu buat
+        $indicators = $rubric['indicators'] ?? [];
+
+        // Ambil review CTL untuk RPS ini (kalau sudah ada)
+        $review = Review::firstOrNew([
+            'rps_id'      => $rps->id,
+            'reviewer_id' => $user->id,
+        ]);
+
+        if (!$review->exists) {
+            $review->status         = 'revisi'; // default
+            $review->rubric_version = $rubric['version'] ?? null;
+        } else {
+            $review->load('items');
+        }
+
+        $itemsByKey = $review->exists
+            ? $review->items->keyBy('criterion_key')
+            : collect();
+
+        return view('reviews.edit', [
+            'rps'        => $rps,
+            'rubric'     => $rubric,
+            'review'     => $review,
+            'itemsByKey' => $itemsByKey,
+            'indicators' => $indicators,
+        ]);
     }
 
+    /* ============================================================
+     * STORE — simpan hasil rubric review
+     * ============================================================ */
     public function store(Request $request, Rps $rps)
     {
-        $rubric = config('rps_rubric');
-        $criteria = $rubric['criteria'] ?? [];
+        $user = $request->user();
 
-        $validated = $request->validate([
-            'selections'              => ['required','array'],              // selections[c_key] = level_index
-            'selections.*'            => ['required','integer','min:0'],
-            'notes'                   => ['nullable','array'],
-            'notes.*'                 => ['nullable','string'],
-            'overall_comment'         => ['nullable','string'],
-            'decision'                => ['required','in:revisi,forwarded'],
-        ]);
+        abort_unless(
+            $user->hasRole('CTL') || $user->hasRole('Super Admin'),
+            403,
+            'Hanya CTL yang dapat melakukan review.'
+        );
 
-        // hitung skor total
-        $total = 0;
-        foreach ($criteria as $key => $c) {
-            $levelIdx = (int)($validated['selections'][$key] ?? 0);
-            $level = $c['levels'][$levelIdx] ?? $c['levels'][0];
-            $weighted = (int) round(($level['score'] * $c['weight']) / 100);
-            $total += $weighted;
+        $rubric     = config('rps_rubric');
+        $indicators = $rubric['indicators'] ?? [];
+
+        // Kumpulkan semua key kriteria dari config (1.1, 1.2, dst.)
+        $criterionKeys = [];
+        foreach ($indicators as $ind) {
+            foreach ($ind['criteria'] ?? [] as $crit) {
+                $criterionKeys[] = $crit['key'];
+            }
         }
 
-        // simpan review + items
-        $review = Review::create([
-            'rps_id'       => $rps->id,
-            'reviewer_id'  => auth()->id(),
-            'comments'     => $validated['overall_comment'] ?? null,
-            'status'       => $validated['decision'], // 'revisi' atau 'forwarded'
-            'total_score'  => $total,
-            'rubric_version' => $rubric['version'] ?? null,
+        // Validasi basic
+        $data = $request->validate([
+            'status'        => ['required', 'in:revisi,forwarded'],
+            'comments'      => ['nullable', 'string'],
+            'scores'        => ['required', 'array'],
+            'scores.*'      => ['nullable', 'integer', 'min:1', 'max:5'],
+            'notes'         => ['nullable', 'array'],
+            'notes.*'       => ['nullable', 'string'],
         ]);
 
-        foreach ($criteria as $key => $c) {
-            $levelIdx = (int)($validated['selections'][$key] ?? 0);
-            $level = $c['levels'][$levelIdx] ?? $c['levels'][0];
-            $weighted = (int) round(($level['score'] * $c['weight']) / 100);
+        $scores = $data['scores'] ?? [];
+        $notes  = $data['notes'] ?? [];
 
-            ReviewItem::create([
-                'review_id'       => $review->id,
-                'criterion_key'   => $key,
-                'criterion_label' => $c['label'],
-                'weight'          => $c['weight'],
-                'level_index'     => $levelIdx,
-                'level_label'     => $level['label'],
-                'level_score'     => $level['score'],
-                'weighted_score'  => $weighted,
-                'notes'           => $validated['notes'][$key] ?? null,
-            ]);
+        // Buat / update record Review
+        $review = Review::firstOrNew([
+            'rps_id'      => $rps->id,
+            'reviewer_id' => $user->id,
+        ]);
+
+        $review->status         = $data['status']; // revisi / forwarded
+        $review->comments       = $data['comments'] ?? null;
+        $review->rubric_version = $rubric['version'] ?? null;
+        $review->save();
+
+        // Hapus item lama, lalu buat ulang (supaya simple)
+        $review->items()->delete();
+
+        $totalScore = 0;
+
+        // Sementara: semua criteria = bobot 1 (nanti bisa diubah kalau kamu mau ikuti Excel persis)
+        $defaultWeight = 1;
+
+        foreach ($indicators as $ind) {
+            foreach ($ind['criteria'] ?? [] as $crit) {
+                $key = $crit['key'];
+
+                // kalau di form tidak dipilih (null/0), lewati
+                $levelIndex = (int)($scores[$key] ?? 0);
+                if ($levelIndex <= 0) {
+                    continue;
+                }
+
+                $scale      = $crit['scale'] ?? [];
+                $levelLabel = $scale[$levelIndex] ?? '';
+                // misal skor mentah = index (1–5)
+                $levelScore    = $levelIndex;
+                $weightedScore = $defaultWeight * $levelScore;
+                $totalScore   += $weightedScore;
+
+                ReviewItem::create([
+                    'review_id'      => $review->id,
+                    'criterion_key'  => $key,
+                    'criterion_label'=> $crit['label'],
+                    'weight'         => $defaultWeight,
+                    'level_index'    => $levelIndex,
+                    'level_label'    => $levelLabel,
+                    'level_score'    => $levelScore,
+                    'weighted_score' => $weightedScore,
+                    'notes'          => $notes[$key] ?? null,
+                ]);
+            }
         }
 
-        // update status RPS sesuai keputusan CTL
-        $rps->update(['status' => $validated['decision']]);
+        $review->total_score = $totalScore;
+        $review->save();
 
-        // log (opsional)
-        \App\Models\ActivityLog::create([
-            'rps_id' => $rps->id,
-            'user_id'=> auth()->id(),
-            'action' => 'review',
-            'notes'  => "Decision: {$validated['decision']}, Score: {$total}",
-        ]);
+        /*
+         * Update RPS:
+         * - Kaprodi boleh approve walau belum direview,
+         *   jadi CTL tidak jadi "stopper".
+         * - Tapi kita tetap tandai bahwa RPS ini SUDAH pernah direview CTL.
+         */
+        $rps->is_reviewed_by_ctl = 1;   // penanda sudah pernah dicek CTL
 
-        return redirect()->route('reviews.index')->with('success', 'Review tersimpan.');
+if ($data['status'] === 'revisi') {
+    // CTL minta revisi → RPS balik ke dosen
+    $rps->status = 'need_revision';
+} elseif ($data['status'] === 'forwarded') {
+    // CTL setuju diteruskan ke Kaprodi
+    // Kaprodi tetap bisa approve walau CTL belum review,
+    // tapi kalau sudah diforward CTL, kita tandai sebagai 'reviewed'
+    $rps->status = 'reviewed';
+}
+
+$rps->save();
+
+        return redirect()
+            ->route('reviews.index')
+            ->with('success', 'Rubrik review berhasil disimpan.');
     }
 }

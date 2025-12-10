@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\{
     Rps, RpsPlo, RpsOutcome, RpsSubClo,
     RpsAssessmentCategory, RpsAssessmentMapping, RpsAssessment,
-    RpsReference, RpsWeeklyPlan, RpsCplCpmkWeight,
+    RpsReference, RpsWeeklyPlan, RpsCplCpmkWeight,RpsWeeklyActivity,
 };
 
 class RpsController extends Controller
@@ -118,6 +118,78 @@ class RpsController extends Controller
             'q'      => $search,
             'status' => $status,
         ],
+    ]);
+}
+public function show(Rps $rps)
+{
+    // load relasi dasar untuk header
+    $rps->load([
+        'course.program.faculty',
+        'plos' => fn($q) => $q->orderBy('order_no'),
+        'plos.outcomes' => fn($q) => $q->orderBy('no'),
+        'plos.outcomes.subClos' => fn($q) => $q->orderBy('no'),
+        'contract',
+    ]);
+
+    // CPMK flat + sub-CPMK (dipakai di beberapa bagian view)
+    $clos = $rps->outcomesFlat()
+        ->with(['subClos' => fn($q) => $q->orderBy('no')])
+        ->orderBy('no')
+        ->get();
+
+    // kategori assessment + matriks bobot
+    $cats = RpsAssessmentCategory::orderBy('order_no')->get();
+
+    $assessments = $rps->assessments()
+        ->get()
+        ->keyBy('assessment_category_id'); // id => RpsAssessment
+
+    $matrix = RpsAssessmentMapping::where('rps_id', $rps->id)
+        ->get()
+        ->groupBy(['assessment_category_id', 'outcome_id']);
+        // akses di blade: $matrix[$catId][$cloId]->first()->percent ?? 0
+
+    // RPM (weekly plans) + referensi
+    $plans = $rps->weeklyPlans()
+        ->with([
+            'subClo.outcome',
+            'reference',
+            'activities' => fn($q) => $q->orderBy('mode')->orderBy('order_no'),
+        ])
+        ->orderBy('week_no')
+        ->orderBy('order_no')
+        ->get();
+
+    // susun per minggu untuk tampilan
+    $weeks = $plans->groupBy('week_no')->map(function ($rows, $weekNo) {
+        $first = $rows->first();
+
+        return [
+            'week_no'              => (int) $weekNo,
+            'session_no'           => $first->session_no,
+            'topic'                => $first->topic,
+            'indicator'            => $first->indicator,
+            'assessment_technique' => $first->assessment_technique,
+            'assessment_criteria'  => $first->assessment_criteria,
+            'learning_in'          => $first->learning_in,
+            'learning_online'      => $first->learning_online,
+            'reference'            => $first->reference,
+            'items'                => $rows, // semua sub-CPMK per minggu
+            'weight_total'         => (float) $rows->sum('weight_percent'),
+        ];
+    })->values();
+
+    $contract = $rps->contract; // boleh null
+
+    return view('rps.show', [
+        'rps'         => $rps,
+        'plos'        => $rps->plos,
+        'clos'        => $clos,
+        'cats'        => $cats,
+        'assessments' => $assessments,
+        'matrix'      => $matrix,
+        'weeks'       => $weeks,
+        'contract'    => $contract,
     ]);
 }
 
@@ -361,8 +433,9 @@ if ($step === 5) {
         ->orderBy('order_no')
         ->get();
 
-    // Grup per week_no (kalau mau lebih granular bisa: groupBy([week_no, session_no]))
-    $weeks = $plans->groupBy('week_no')->map(function($rows, $weekNo){
+    // Grup per week_no
+    $weeks = $plans->groupBy('week_no')->map(function($rows, $weekNo) {
+        /** @var \App\Models\RpsWeeklyPlan $first */
         $first = $rows->first();
 
         return [
@@ -372,11 +445,20 @@ if ($step === 5) {
             'indicator'             => $first->indicator,
             'assessment_technique'  => $first->assessment_technique,
             'assessment_criteria'   => $first->assessment_criteria,
+
+            // teks mentah (sinkron ke DB lama)
             'learning_in'           => $first->learning_in,
             'learning_online'       => $first->learning_online,
+
             'reference_id'          => $first->reference_id,
             'weight_total'          => (float)$rows->sum('weight_percent'),
-            'sub_clos'              => $rows->pluck('sub_clo_id')->all(), // daftar ID untuk dropdown bawah
+
+            // dropdown Sub-CPMK
+            'sub_clos'              => $rows->pluck('sub_clo_id')->all(),
+
+            // ⬇⬇ NEW: parse teks jadi array aktivitas
+            'activities_in'         => $this->parseWeeklyActivities($first->learning_in),
+            'activities_online'     => $this->parseWeeklyActivities($first->learning_online),
         ];
     })->values();
 
@@ -387,7 +469,10 @@ if ($step === 5) {
         'weeks'   => $weeks,
     ]);
 }
-// ---------- STEP 6 (CREATE) ----------
+
+
+
+/* ---------- STEP 6 (CREATE: KONTRAK) ---------- */
 if ($step === 6) {
 
     $rps = Rps::findOrFail($request->session()->get('rps_id'));
@@ -412,8 +497,6 @@ TXT;
         'placeholderContract'  => $placeholderContract,
     ]);
 }
-
-
         abort(404);
     }
 
@@ -465,6 +548,11 @@ TXT;
         $rps->save();
 
         $request->session()->put('rps_id', $rps->id);
+        if ($request->boolean('exit_to_index')) {
+    return redirect()
+        ->route('rps.index')
+        ->with('success','Pesan sukses sesuai step.');
+}
         return redirect()->route('rps.create.step', 2)
             ->with('success','Identitas tersimpan. Lanjut ke Step 2.');
     }
@@ -582,7 +670,7 @@ if ($step === 2) {
      */
 
     RpsAssessmentMapping::where('rps_id', $rps->id)->delete();
-    RpsAssessment::where('rps_id', $rps->id)->delete();
+    //RpsAssessment::where('rps_id', $rps->id)->delete();
 
     $rps->plos()->each(function (RpsPlo $plo) {
         $plo->outcomes()->each(function (RpsOutcome $o) {
@@ -698,7 +786,11 @@ if ($step === 2) {
             ]);
         }
     }
-
+if ($request->boolean('exit_to_index')) {
+    return redirect()
+        ->route('rps.index')
+        ->with('success','Pesan sukses sesuai step.');
+}
     return redirect()
         ->route('rps.create.step', 3)
         ->with('success','CPL → CPMK → sub-CPMK & bobot assessment tersimpan. Lanjut ke Step 3 (summary & deskripsi penilaian).');
@@ -783,7 +875,11 @@ if ($step === 3) {
             ]);
         }
     }
-
+    if ($request->boolean('exit_to_index')) {
+    return redirect()
+        ->route('rps.index')
+        ->with('success','Pesan sukses sesuai step.');
+}
     return redirect()
         ->route('rps.create.step', 4)
         ->with('success', 'Matriks & bobot kategori (dihitung dari CPMK) tersimpan. Lanjut ke Step 4 (Referensi).');
@@ -800,7 +896,7 @@ if ($step === 4) {
         'refs'           => ['required','array','min:1'],
         'refs.*.type'    => ['required_with:refs.*.text', 'in:utama,pendukung,lainnya'],
         'refs.*.text'    => ['required_with:refs.*.type', 'string'],          // teks referensi bebas
-        'refs.*.url'     => ['nullable', 'string','max:500'],// URL/DOI WAJIB
+        'refs.*.url'     => ['nullable', 'string','max:500'],
     ], [
         'refs.required'              => 'Minimal 1 referensi harus diisi.',
         'refs.*.type.required_with'  => 'Tipe referensi wajib diisi jika ada teks referensi.',
@@ -809,31 +905,63 @@ if ($step === 4) {
 
     $refsInput = $data['refs'] ?? [];
 
-    // Hapus referensi lama dulu
-    $rps->references()->delete();
+    // Ambil referensi existing, urut berdasar order_no
+    $existing = $rps->references()
+        ->orderBy('order_no')
+        ->get()
+        ->values(); // reindex 0,1,2,...
 
-    // Simpan referensi baru
-    $order = 1;
-    foreach ($refsInput as $ref) {
+    $usedIds = [];
+    $order   = 1;
+
+    foreach ($refsInput as $idx => $ref) {
         $type = trim($ref['type'] ?? '');
         $text = trim($ref['text'] ?? '');
         $url  = trim($ref['url']  ?? '');
 
-        // Kalau semua kosong, skip
+        // kalau semua kosong, skip
         if ($type === '' && $text === '' && $url === '') {
             continue;
         }
 
-        $rps->references()->create([
-            'type'      => $type ?: 'utama',  // default kalau kosong
-            'title'     => $text,             // pakai kolom "title" sebagai teks referensi
-            'url'       => $url,
-            'order_no'  => $order++,
+        // Kalau ada row existing di posisi ini → update saja (ID tetap)
+        $model = $existing[$order - 1] ?? null;
 
-            // kolom lain (author, year, publisher, city, isbn_issn) dibiarkan null
-        ]);
+        if ($model) {
+            $model->type     = $type ?: 'utama';
+            $model->title    = $text;
+            $model->url      = $url ?: null;
+            $model->order_no = $order;
+            $model->save();
+        } else {
+            // Kalau belum ada → buat baru
+            $model = $rps->references()->create([
+                'type'     => $type ?: 'utama',
+                'title'    => $text,
+                'url'      => $url ?: null,
+                'order_no' => $order,
+            ]);
+        }
+
+        $usedIds[] = $model->id;
+        $order++;
     }
 
+    // Hapus referensi yang sudah tidak dipakai lagi (tidak ada di input baru)
+    if (count($usedIds) > 0) {
+        $rps->references()
+            ->whereNotIn('id', $usedIds)
+            ->delete();
+    } else {
+        // Kalau user benar-benar mengosongkan semua, boleh hapus semua
+        $rps->references()->delete();
+    }
+    
+    if ($request->boolean('exit_to_index')) {
+    return redirect()
+        ->route('rps.index')
+        ->with('success','Pesan sukses sesuai step.');
+}
     return redirect()->route('rps.create.step', 5)
         ->with('success','Referensi berhasil disimpan. Lanjut ke Step 5 (Rencana Pembelajaran Mingguan).');
 }
@@ -874,8 +1002,8 @@ if ($step === 5) {
         ->with('success','Rencana Penilaian tersimpan. Lanjut ke Step 6 (RPM).');
 }
 */
-/* ---------- STEP 5 ---------- */
-/* ---------- STEP 5 ---------- */
+/* ---------- STEP 5 (STORE: RENCANA PEMBELAJARAN MINGGUAN) ---------- */
+// ---------- STEP 5 (STORE) ----------
 if ($step === 5) {
     $rpsId = $request->session()->get('rps_id');
     $rps   = Rps::findOrFail($rpsId);
@@ -891,6 +1019,8 @@ if ($step === 5) {
         'weeks.*.indicator'               => ['nullable','string'],
         'weeks.*.assessment_technique'    => ['nullable','string','max:100'],
         'weeks.*.assessment_criteria'     => ['nullable','string'],
+
+        // sinkron hasil JS (gabungan aktivitas luring/daring)
         'weeks.*.learning_in'             => ['nullable','string'],
         'weeks.*.learning_online'         => ['nullable','string'],
 
@@ -901,7 +1031,7 @@ if ($step === 5) {
         'weeks.*.sub_clos.*'              => ['required','integer','exists:rps_sub_clos,id'],
     ]);
 
-    // Hapus RPM lama
+    // Hapus RPM lama (hanya dari rps_weekly_plans)
     $rps->weeklyPlans()->delete();
 
     $createdPlans = [];
@@ -916,8 +1046,11 @@ if ($step === 5) {
         $indicator  = $week['indicator'] ?? null;
         $tech       = $week['assessment_technique'] ?? null;
         $criteria   = $week['assessment_criteria'] ?? null;
+
+        // hasil sinkron JS (gabungan teks aktivitas per week)
         $learnIn    = $week['learning_in'] ?? null;
         $learnOn    = $week['learning_online'] ?? null;
+
         $refId      = !empty($week['reference_id']) ? (int)$week['reference_id'] : null;
 
         $subClosIds = $week['sub_clos'] ?? [];
@@ -975,39 +1108,58 @@ if ($step === 5) {
         }
     }
 
-    return redirect()->route('rps.create.step', 6)
+    if ($request->boolean('exit_to_index')) {
+        return redirect()
+            ->route('rps.index')
+            ->with('success','Rencana Pembelajaran Mingguan berhasil disimpan.');
+    }
+
+    return redirect()
+        ->route('rps.create.step', 6)
         ->with('success','Rencana Pembelajaran Mingguan Berhasil Disimpan. Lanjut ke Step 6 Kontrak.');
 }
 
+
+
+
 // ---------- STEP 6 (STORE) ----------
+// ---------- STEP 6 (STORE: KONTRAK) ----------
 if ($step === 6) {
 
     $rps = Rps::findOrFail($request->session()->get('rps_id'));
 
     $data = $request->validate([
         'class_policy'   => ['nullable','string'],
-        'contract_text'  => ['nullable','string'],
+        'contract_text'  => ['required','string'],
+    ], [
+        'contract_text.required' => 'Kontrak perkuliahan wajib diisi.',
     ]);
 
     $contract = $rps->contract ?: new \App\Models\RpsContract([
         'rps_id' => $rps->id,
     ]);
 
-    $contract->class_policy  = $data['class_policy'] ?? null;
-    $contract->contract_text = $data['contract_text'] ?? null;
+    $contract->class_policy  = $data['class_policy']   ?? null;
+    $contract->contract_text = $data['contract_text']; // sudah required
     $contract->save();
 
     // Step 6 adalah step terakhir → update status RPS
+if ($rps->status === 'need_revision') {
+    // dosen baru saja submit revisi
+    $rps->status = 'revision_submitted';
+} elseif (in_array($rps->status, ['draft', 'revision_submitted', null])) {
+    // submit pertama kali
     $rps->status = 'submitted';
-    $rps->save();
+}
+
+$rps->save();
+
+
 
     return redirect()
         ->route('rps.index')
         ->with('success', 'Kontrak perkuliahan tersimpan.');
 }
-
-
-
         abort(404);
     }
     public function resume(Request $request, Rps $rps, int $step = 1)
@@ -1025,6 +1177,43 @@ if ($step === 6) {
     // Arahkan ke step yang diminta (1, 2, 3, dst.)
     return redirect()->route('rps.create.step', $step);
 }
+
+public function resumeAuto(Request $request, Rps $rps)
+{
+    // Simpan rps_id ke session (supaya createStep / storeStep tahu RPS mana)
+    $request->session()->put('rps_id', $rps->id);
+
+    // Default: mulai dari Step 1
+    $step = 1;
+
+    // Kalau sudah punya CPL/CPMK → minimal Step 2
+    if ($rps->plos()->exists()) {
+        $step = 2;
+    }
+
+    // Kalau sudah punya matriks assessment → minimal Step 3
+    if ($rps->assessments()->exists()) {
+        $step = 3;
+    }
+
+    // Kalau sudah punya referensi → minimal Step 4
+    if ($rps->references()->exists()) {
+        $step = 4;
+    }
+
+    // Kalau sudah punya RPM (weekly plans) → minimal Step 5
+    if ($rps->weeklyPlans()->exists()) {
+        $step = 5;
+    }
+
+    // Kalau sudah punya kontrak → Step 6 (final)
+    if ($rps->contract()->exists()) {
+        $step = 6;
+    }
+
+    return redirect()->route('rps.create.step', $step);
+}
+
 
     public function editCplCpmk(Rps $rps)
 {
@@ -1082,5 +1271,51 @@ public function updateCplCpmk(Request $request, Rps $rps)
         ->with('success', 'Bobot CPL–CPMK berhasil disimpan. Lanjut ke Step 3 (Bobot CPMK & Assessment).');
 }
 
+/**
+ * Parse teks learning_in / learning_online menjadi array aktivitas
+ * Format baris yang dikenali: [KM|PB|PT] durasi — deskripsi
+ * Contoh: "[PB] 2×50' — Diskusi kasus"
+ */
+private function parseWeeklyActivities(?string $text): array
+{
+    if (!$text) {
+        return [];
+    }
+
+    $lines = preg_split("/\r\n|\n|\r/", $text);
+    $result = [];
+
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === '') {
+            continue;
+        }
+
+        $type = '';
+        $duration = '';
+        $desc = $line;
+
+        // Ambil kode di awal kalau formatnya [KM] / [PB] / [PT]
+        if (preg_match('/^\[(KM|PB|PT)\]\s*/', $desc, $m)) {
+            $type = $m[1]; // KM / PB / PT
+            $desc = trim(substr($desc, strlen($m[0])));
+        }
+
+        // Pisahkan durasi dan deskripsi pakai "—" pertama
+        if (strpos($desc, '—') !== false) {
+            [$durationPart, $rest] = explode('—', $desc, 2);
+            $duration = trim($durationPart);
+            $desc     = trim($rest);
+        }
+
+        $result[] = [
+            'type'        => $type,
+            'duration'    => $duration,
+            'description' => $desc,
+        ];
+    }
+
+    return $result;
+}
 
 }

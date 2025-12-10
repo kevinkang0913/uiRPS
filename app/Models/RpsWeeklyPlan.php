@@ -41,4 +41,21 @@ class RpsWeeklyPlan extends Model
             ->withPivot('percent')
             ->withTimestamps();
     }
+    public function activities()
+    {
+        return $this->hasMany(RpsWeeklyActivity::class, 'weekly_plan_id')
+                    ->orderBy('order_no');
+    }
+
+    public function activitiesLuring()
+    {
+        return $this->activities()
+                    ->where('mode', RpsWeeklyActivity::MODE_LURING);
+    }
+
+    public function activitiesDaring()
+    {
+        return $this->activities()
+                    ->where('mode', RpsWeeklyActivity::MODE_DARING);
+    }
 }

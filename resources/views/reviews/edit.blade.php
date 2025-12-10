@@ -1,196 +1,240 @@
 @extends('layouts.app')
+
 @section('content')
-<style>
-  .rubric-table { table-layout: fixed; }
-  .rubric-table th, .rubric-table td { vertical-align: middle; }
-  .scale-cell {
-    cursor: pointer;
-    user-select: none;
-    border: 1px solid #dee2e6;
-    padding: .5rem;
-    min-height: 56px;
-  }
-  .scale-cell.active {
-    background: #2e7d32 !important; /* hijau */
-    color: #fff !important;
-    font-weight: 600;
-  }
-  .col-no { width: 48px; }
-  .col-indikator { width: 220px; }
-  .col-kriteria { width: 360px; }
-  .col-skor { width: 64px; text-align:center; }
-  .col-catatan { width: 280px; }
-  .col-keterangan { width: 280px; }
-  .col-versi { width: 90px; }
-  .col-verifikasi { width: 110px; }
-  .header-rotate { text-align:center; }
-</style>
+<div class="container-xxl">
 
-@php
-  $rubric = config('rps_rubric');
-  $indicators = $rubric['indicators'] ?? [];
-@endphp
+  <style>
+    .rubric-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+    .rubric-table th,
+    .rubric-table td {
+        border: 1px solid #dee2e6;
+        padding: .4rem .5rem;
+        vertical-align: top;
+    }
+    .rubric-table thead th {
+        background: #f8f9fa;
+        text-align: center;
+    }
+    .indicator-row {
+        background: #e3f2fd;
+        font-weight: 600;
+    }
+    .scale-cell {
+        cursor: pointer;
+        user-select: none;
+        min-width: 70px;
+        text-align: center;
+        font-size: 12px;
+        padding: .3rem .4rem;
+    }
+    .scale-cell span.level-badge {
+        display: inline-block;
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-weight: 600;
+        border: 1px solid #dee2e6;
+        background: #f9f9f9;
+    }
+    .scale-cell.active span.level-badge {
+        background: #2e7d32;
+        color: #fff;
+        border-color: #2e7d32;
+    }
+    .scale-desc {
+        display: block;
+        margin-top: 2px;
+        font-size: 11px;
+        color: #555;
+        text-align: left;
+    }
+    .notes-input {
+        font-size: 12px;
+    }
+  </style>
 
-<div class="container-fluid">
-  <h2 class="mb-3">Review RPS: {{ $rps->title }}</h2>
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h4 class="mb-0">Review RPS</h4>
+      <div class="text-muted small">
+        RPS #{{ $rps->id }} — {{ $rps->course->code ?? '' }} {{ $rps->course->name ?? '' }}
+      </div>
+    </div>
+    <a href="{{ route('rps.show', $rps->id) }}" class="btn btn-sm btn-outline-secondary">
+      ← Kembali ke Detail RPS
+    </a>
+  </div>
 
-  @if ($errors->any())
+  @if(session('success'))
+    <div class="alert alert-success">{{ session('success') }}</div>
+  @endif
+  @if($errors->any())
     <div class="alert alert-danger">
+      <b>Periksa input:</b>
       <ul class="mb-0">
-        @foreach ($errors->all() as $e)<li>{{ $e }}</li>@endforeach
+        @foreach($errors->all() as $e)<li>{{ $e }}</li>@endforeach
       </ul>
     </div>
   @endif
 
-  <form method="POST" action="{{ route('reviews.store', $rps->id) }}" id="reviewForm">
+  <form method="POST" action="{{ route('reviews.store', $rps->id) }}">
     @csrf
 
-    <div class="mb-2 small text-muted">
-      Rubric versi: <strong>{{ $rubric['version'] ?? '-' }}</strong>
-    </div>
+    <div class="card mb-3 shadow-sm border-0">
+      <div class="card-body">
+        <div class="mb-2 small text-muted">
+          Rubrik versi: <strong>{{ $rubric['version'] ?? '-' }}</strong>
+        </div>
 
-    <div class="table-responsive">
-      <table class="table table-bordered rubric-table align-middle">
-        <thead class="table-light">
-          <tr>
-            <th class="col-no text-center">No</th>
-            <th class="col-indikator">Indikator</th>
-            <th class="col-kriteria">Kriteria</th>
-            <th class="text-center" colspan="5">SKALA</th>
-            <th class="col-skor">SKOR</th>
-            <th class="col-catatan">CATATAN</th>
-            <th class="col-keterangan">Keterangan</th>
-            <th class="col-versi">Versi RPS</th>
-            <th class="col-verifikasi">Verifikasi</th>
-          </tr>
-          <tr class="table-light">
-            <th></th><th></th><th></th>
-            <th class="text-center">5</th>
-            <th class="text-center">4</th>
-            <th class="text-center">3</th>
-            <th class="text-center">2</th>
-            <th class="text-center">1</th>
-            <th></th><th></th><th></th><th></th>
-          </tr>
-        </thead>
+        <table class="rubric-table">
+          <thead>
+            <tr>
+              <th style="width:40px;">No</th>
+              <th style="width:220px;">Indikator</th>
+              <th>Kriteria</th>
+              <th style="width:90px;">Skor 5</th>
+              <th style="width:90px;">Skor 4</th>
+              <th style="width:90px;">Skor 3</th>
+              <th style="width:90px;">Skor 2</th>
+              <th style="width:90px;">Skor 1</th>
+              <th style="width:200px;">Catatan</th>
+            </tr>
+          </thead>
+          <tbody>
+          @foreach($rubric['indicators'] as $ind)
+            <tr class="indicator-row">
+              <td colspan="9">
+                {{ $ind['no'] ?? '' }}. {{ $ind['title'] ?? '' }}
+              </td>
+            </tr>
 
-        <tbody id="rubricBody">
-          @foreach($indicators as $ind)
-            @php $rowspan = count($ind['criteria']); @endphp
-
-            @foreach($ind['criteria'] as $rowIdx => $crit)
+            @foreach($ind['criteria'] as $crit)
               @php
-                $key   = $crit['key'];
-                $sel   = old("selections.$key"); // restore pilihan jika validasi gagal
-                $scale = $crit['scale'];
+                $key      = $crit['key'];
+                $label    = $crit['label'];
+                $scale    = $crit['scale'] ?? [];
+                // existing choice (kalau review sudah pernah diisi)
+                $existingItem = $itemsByKey[$key] ?? null;
+                $selectedLevel = old("scores.$key", $existingItem->level_index ?? null);
+                $notesVal      = old("notes.$key", $existingItem->notes ?? '');
               @endphp
-              <tr data-key="{{ $key }}">
-                @if ($rowIdx === 0)
-                  <td class="text-center" rowspan="{{ $rowspan }}">{{ $ind['no'] }}</td>
-                  <td rowspan="{{ $rowspan }}">{{ $ind['title'] }}</td>
-                @endif
 
-                <td>{{ $crit['label'] }}</td>
+              <tr data-criterion="{{ $key }}">
+                <td class="text-center align-middle">{{ $key }}</td>
+                <td class="align-middle small">
+                  {{ $ind['title'] ?? '' }}
+                </td>
+                <td class="small">
+                  {!! nl2br(e($label)) !!}
+                  @if(!empty($crit['notes_hint']))
+                    <div class="text-muted small mt-1">
+                      <em>Hint: {!! nl2br(e($crit['notes_hint'])) !!}</em>
+                    </div>
+                  @endif
+                </td>
 
-                {{-- SKALA 5..1 --}}
-                @foreach([5,4,3,2,1] as $level)
-                  <td class="scale-cell text-wrap {{ ($sel == $level) ? 'active' : '' }}"
-                      data-level="{{ $level }}"
-                      onclick="selectScale(this)">
-                    {{ $scale[$level] ?? '' }}
+                @for ($lvl = 5; $lvl >= 1; $lvl--)
+                  @php
+                    $desc = $scale[$lvl] ?? '';
+                    $isActive = ((int)$selectedLevel === $lvl);
+                  @endphp
+                  <td class="scale-cell {{ $isActive ? 'active' : '' }}"
+                      data-level="{{ $lvl }}"
+                      onclick="selectLevel('{{ $key }}', {{ $lvl }}, this)">
+                    @if($desc || true)
+                      <span class="level-badge">{{ $lvl }}</span>
+                      @if($desc)
+                        <span class="scale-desc">{!! nl2br(e($desc)) !!}</span>
+                      @endif
+                    @endif
                   </td>
-                @endforeach
+                @endfor
 
-                {{-- SKOR --}}
-                <td class="col-skor">
-                  <span class="score-val fw-bold">{{ $sel ? $sel : '' }}</span>
-                  <input type="hidden" name="selections[{{ $key }}]" value="{{ $sel ?? '' }}">
-                </td>
-
-                {{-- CATATAN --}}
                 <td>
-                  <input type="text" class="form-control form-control-sm"
-                         name="notes[{{ $key }}]"
-                         value="{{ old("notes.$key") }}"
-                         placeholder="Catatan reviewer (opsional)">
+                  <textarea name="notes[{{ $key }}]"
+                            rows="3"
+                            class="form-control form-control-sm notes-input"
+                            placeholder="Catatan untuk kriteria ini">{{ $notesVal }}</textarea>
                 </td>
 
-                {{-- Keterangan (hint dari config) --}}
-                <td class="small text-muted">{{ $crit['notes_hint'] ?? '' }}</td>
-
-                {{-- Versi RPS --}}
-                <td>
-                  <input type="text" class="form-control form-control-sm"
-                         name="rps_version[{{ $key }}]" value="{{ old("rps_version.$key") }}">
-                </td>
-
-                {{-- Verifikasi (checkbox) --}}
-                <td class="text-center">
-                  <input class="form-check-input" type="checkbox"
-                         name="verified[{{ $key }}]" value="1"
-                         {{ old("verified.$key") ? 'checked' : '' }}>
-                </td>
+                {{-- input hidden utk menyimpan skor terpilih --}}
+                <input type="hidden"
+                       name="scores[{{ $key }}]"
+                       value="{{ $selectedLevel }}">
               </tr>
             @endforeach
           @endforeach
-        </tbody>
-
-        {{-- Total skor (opsional penjumlahan sederhana 5..1, kalau mau bobot silakan aktivasi di controller) --}}
-        <tfoot>
-          <tr class="table-light">
-            <th colspan="8" class="text-end">Total Skor (penjumlahan level 5..1):</th>
-            <th class="text-center"><span id="totalScore">0</span></th>
-            <th colspan="4"></th>
-          </tr>
-        </tfoot>
-      </table>
+          </tbody>
+        </table>
+      </div>
     </div>
 
-    <div class="mb-3">
-      <label class="form-label">Komentar Umum</label>
-      <textarea name="overall_comment" class="form-control" rows="3">{{ old('overall_comment') }}</textarea>
-    </div>
+    <div class="card mb-3 shadow-sm border-0">
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label">Komentar umum untuk RPS ini</label>
+          <textarea name="general_comment" rows="3" class="form-control">{{ old('general_comment', $existing->comments ?? '') }}</textarea>
+        </div>
 
-    <div class="d-flex justify-content-between">
-      <a href="{{ route('reviews.index') }}" class="btn btn-secondary">Batal</a>
-      <div class="d-flex gap-2">
-        <input type="hidden" name="decision" id="decisionInput" value="revisi">
-        <button type="button" class="btn btn-warning" onclick="submitDecision('revisi')">Minta Revisi</button>
-        <button type="button" class="btn btn-primary" onclick="submitDecision('forwarded')">Teruskan ke Kaprodi</button>
+        <div class="mb-2">
+          <label class="form-label">Keputusan</label>
+          <div class="d-flex flex-wrap gap-3 small">
+            <div class="form-check">
+              <input class="form-check-input"
+                    type="radio"
+                    name="status"
+                    id="status_revisi"
+                    value="revisi"
+                    required>
+              <label class="form-check-label" for="status_revisi">
+                  Perlu revisi (kembali ke Dosen)
+              </label>
+          </div>
+            <div class="form-check">
+              <input class="form-check-input"
+                    type="radio"
+                    name="status"
+                    id="status_forwarded"
+                    value="forwarded"
+                    required>
+                <label class="form-check-label" for="status_forwarded">
+                    Layak diteruskan ke Kaprodi
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-footer d-flex justify-content-between bg-light">
+        <a href="{{ route('rps.show', $rps->id) }}" class="btn btn-outline-secondary">
+          ← Batal
+        </a>
+        <button type="submit" class="btn btn-primary">
+          Simpan Review
+        </button>
       </div>
     </div>
   </form>
 </div>
 
 <script>
-function selectScale(td) {
-  const tr = td.closest('tr');
-  tr.querySelectorAll('.scale-cell').forEach(c => c.classList.remove('active'));
-  td.classList.add('active');
+function selectLevel(criterionKey, level, cell) {
+  // hapus active di semua cell baris ini
+  const row = cell.closest('tr[data-criterion]');
+  row.querySelectorAll('.scale-cell').forEach(td => td.classList.remove('active'));
 
-  const level = td.dataset.level;
-  tr.querySelector('.score-val').textContent = level;
-  tr.querySelector('input[type=hidden][name^="selections"]').value = level;
+  // set active di cell yg diklik
+  cell.classList.add('active');
 
-  recalcTotal();
+  // set value hidden input
+  const hidden = row.querySelector('input[type="hidden"][name^="scores["]');
+  if (hidden) {
+    hidden.value = level;
+  }
 }
-
-function recalcTotal() {
-  let total = 0;
-  document.querySelectorAll('#rubricBody tr').forEach(tr => {
-    const v = tr.querySelector('.score-val')?.textContent || '';
-    const n = parseInt(v, 10);
-    if (!isNaN(n)) total += n;
-  });
-  document.getElementById('totalScore').textContent = total;
-}
-
-function submitDecision(dec) {
-  document.getElementById('decisionInput').value = dec;
-  document.getElementById('reviewForm').submit();
-}
-
-// init total on load
-document.addEventListener('DOMContentLoaded', recalcTotal);
 </script>
 @endsection

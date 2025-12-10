@@ -15,7 +15,6 @@ use App\Http\Controllers\FacultyController;
 use App\Http\Controllers\ProgramController;
 use App\Http\Controllers\CourseController;
 use App\Http\Controllers\ClassSectionController;
-
 use App\Http\Controllers\AcademicApiController;
 use App\Http\Controllers\Admin\ImportController;
 
@@ -28,7 +27,7 @@ Route::get('/', fn () => view('welcome'));
 
 // Dashboard (login + verified)
 Route::get('/dashboard', fn () => view('dashboard'))
-    ->middleware(['auth','verified'])
+    ->middleware(['auth', 'verified'])
     ->name('dashboard');
 
 /*
@@ -49,11 +48,15 @@ Route::middleware('auth')->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | RPS INDEX — bisa diakses semua user login (Dosen, Kaprodi, Admin, CTL, Super Admin)
-    |           → hak create/edit diatur di group terpisah
+    | RPS INDEX + SHOW
+    |   - INDEX: daftar RPS (scoping per role di controller)
+    |   - SHOW : detail RPS — boleh dilihat semua user login
     |--------------------------------------------------------------------------
     */
     Route::get('/rps', [RpsController::class, 'index'])->name('rps.index');
+
+    Route::get('/rps/{rps}/show', [RpsController::class, 'show'])
+        ->name('rps.show');
 
     /*
     |--------------------------------------------------------------------------
@@ -62,20 +65,28 @@ Route::middleware('auth')->group(function () {
     |--------------------------------------------------------------------------
     */
     Route::middleware('role:Dosen,Super Admin')->group(function () {
+
+        // Mulai RPS baru (reset wizard)
         Route::get('/rps/create', [RpsController::class, 'startNew'])
             ->name('rps.start');
 
+        // Mapping CPL–CPMK manual (fitur terpisah dari wizard utama)
         Route::get('/rps/{rps}/cpl-cpmk', [RpsController::class, 'editCplCpmk'])
             ->name('rps.cpl_cpmk.edit');
         Route::post('/rps/{rps}/cpl-cpmk', [RpsController::class, 'updateCplCpmk'])
             ->name('rps.cpl_cpmk.update');
 
+        // Lanjutkan wizard dari RPS tertentu
         Route::get('/rps/{rps}/resume/{step?}', [RpsController::class, 'resume'])
             ->name('rps.resume');
 
+        // Auto-resume ke step yang sesuai (mis. dari list RPS)
+        Route::get('/rps/{rps}/resume-auto', [RpsController::class, 'resumeAuto'])
+            ->name('rps.resume.auto');
+
         /*
         |--------------------------------------------------------------------------
-        | RPS Wizard (LETakkan di atas resource RPS)
+        | RPS Wizard Step-by-step (LETakkan di atas resource RPS)
         |--------------------------------------------------------------------------
         */
         Route::get('/rps/create/step/{step}', [RpsController::class, 'createStep'])
@@ -86,24 +97,32 @@ Route::middleware('auth')->group(function () {
             ->whereNumber('step')
             ->name('rps.store.step');
 
-        // Resource utama RPS:
-        //   - TANPA index (sudah didefinisikan bebas di atas)
-        //   - TANPA create/store/show (pakai wizard)
+        /*
+        |--------------------------------------------------------------------------
+        | Resource utama RPS:
+        |   - TANPA index (sudah didefinisikan bebas di atas)
+        |   - TANPA create/store/show (pakai wizard & /rps/{rps}/show)
+        |--------------------------------------------------------------------------
+        */
         Route::resource('rps', RpsController::class)
-            ->except(['index','create','store','show']);
+            ->except(['index', 'create', 'store', 'show']);
     });
 
     /*
     |--------------------------------------------------------------------------
     | AJAX / API Akademik — dipakai di RPS wizard
-    | (boleh untuk semua user login)
+    |   (boleh untuk semua user login)
     |--------------------------------------------------------------------------
     */
     Route::prefix('api')->name('api.')->group(function () {
-        Route::get('/faculties', [AcademicApiController::class, 'faculties'])->name('faculties');
-        Route::get('/programs/{faculty}', [AcademicApiController::class, 'programsByFaculty'])->name('programs.byFaculty');
-        Route::get('/courses/{program}', [AcademicApiController::class, 'coursesByProgram'])->name('courses.byProgram');
-        Route::get('/sections/{course}', [AcademicApiController::class, 'sectionsByCourse'])->name('sections.byCourse');
+        Route::get('/faculties', [AcademicApiController::class, 'faculties'])
+            ->name('faculties');
+        Route::get('/programs/{faculty}', [AcademicApiController::class, 'programsByFaculty'])
+            ->name('programs.byFaculty');
+        Route::get('/courses/{program}', [AcademicApiController::class, 'coursesByProgram'])
+            ->name('courses.byProgram');
+        Route::get('/sections/{course}', [AcademicApiController::class, 'sectionsByCourse'])
+            ->name('sections.byCourse');
     });
 
     /*
@@ -114,14 +133,14 @@ Route::middleware('auth')->group(function () {
 
     // CTL — Review RPS (+ Super Admin)
     Route::middleware('role:CTL,Super Admin')->group(function () {
-        Route::get('reviews', [ReviewController::class, 'index'])->name('reviews.index');
+        Route::get('reviews',        [ReviewController::class, 'index'])->name('reviews.index');
         Route::get('reviews/{rps}/edit', [ReviewController::class, 'edit'])->name('reviews.edit');
         Route::post('reviews/{rps}', [ReviewController::class, 'store'])->name('reviews.store');
     });
 
     // Kaprodi — Approval RPS (+ Super Admin)
     Route::middleware('role:Kaprodi,Super Admin')->group(function () {
-        Route::get('approvals', [ApprovalController::class, 'index'])->name('approvals.index');
+        Route::get('approvals',        [ApprovalController::class, 'index'])->name('approvals.index');
         Route::get('approvals/{rps}/edit', [ApprovalController::class, 'edit'])->name('approvals.edit');
         Route::post('approvals/{rps}', [ApprovalController::class, 'store'])->name('approvals.store');
     });
@@ -144,6 +163,7 @@ Route::middleware('auth')->group(function () {
             ->name('admin.import.courses.real');
         Route::get('/admin/import/courses/report', [ImportController::class, 'downloadReport'])
             ->name('admin.import.courses.report');
+
         Route::get('/admin/reports/export', fn () => 'Coming soon')
             ->name('reports.export');
 
@@ -152,9 +172,9 @@ Route::middleware('auth')->group(function () {
         | Master Data (CRUD)
         |--------------------------------------------------------------------------
         */
-        Route::resource('faculties', FacultyController::class);
-        Route::resource('programs', ProgramController::class);
-        Route::resource('courses',  CourseController::class);
+        Route::resource('faculties',      FacultyController::class);
+        Route::resource('programs',       ProgramController::class);
+        Route::resource('courses',        CourseController::class);
         Route::resource('class-sections', ClassSectionController::class);
 
         /*
@@ -166,19 +186,24 @@ Route::middleware('auth')->group(function () {
         Route::resource('roles', RoleController::class)->except(['show']);
 
         // Assign roles
-        Route::get('users/{user}/roles', [UserRoleController::class, 'edit'])->name('users.roles.edit');
-        Route::post('users/{user}/roles', [UserRoleController::class, 'update'])->name('users.roles.update');
+        Route::get('users/{user}/roles', [UserRoleController::class, 'edit'])
+            ->name('users.roles.edit');
+        Route::post('users/{user}/roles', [UserRoleController::class, 'update'])
+            ->name('users.roles.update');
 
         // Assign fakultas/prodi (scope)
-        Route::get('users/{user}/scope', [UserScopeController::class, 'edit'])->name('users.scope.edit');
-        Route::post('users/{user}/scope', [UserScopeController::class, 'update'])->name('users.scope.update');
+        Route::get('users/{user}/scope', [UserScopeController::class, 'edit'])
+            ->name('users.scope.edit');
+        Route::post('users/{user}/scope', [UserScopeController::class, 'update'])
+            ->name('users.scope.update');
 
         /*
         |--------------------------------------------------------------------------
         | Activity Logs
         |--------------------------------------------------------------------------
         */
-        Route::get('/activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
+        Route::get('/activity-logs', [ActivityLogController::class, 'index'])
+            ->name('activity-logs.index');
     });
 });
 

@@ -1,3 +1,4 @@
+{{-- resources/views/rps/steps/contract.blade.php --}}
 @extends('layouts.app')
 
 @section('content')
@@ -35,6 +36,7 @@
         rows="7"
         class="form-control"
         placeholder="{{ $placeholderClass }}"
+        required
       >{{ $vClass }}</textarea>
 
       <hr class="my-4">
@@ -45,15 +47,26 @@
         rows="7"
         class="form-control"
         placeholder="{{ $placeholderContract }}"
+        required
       >{{ $vCont }}</textarea>
 
     </div>
 
-    <div class="card-footer bg-light d-flex justify-content-between">
+    <div class="card-footer bg-light d-flex justify-content-between align-items-center">
       <a href="{{ route('rps.create.step', 5) }}" class="btn btn-outline-secondary">
-        ← Kembali
+        ← Kembali ke Step 5
       </a>
-      <button type="submit" class="btn btn-primary">Simpan</button>
+
+      <button type="submit"
+              name="exit_to_index"
+              value="1"
+              class="btn btn-success">
+        Simpan & Kembali ke Daftar
+      </button>
+
+      <button type="submit" class="btn btn-primary">
+        Simpan Kontrak & Selesai
+      </button>
     </div>
 
   </form>

@@ -66,5 +66,42 @@ public function contract()
 {
     return $this->hasOne(RpsContract::class);
 }
+public function getStatusLabelAttribute()
+{
+    if ($this->status === 'approved') {
+        return $this->is_reviewed_by_ctl
+            ? 'Approved (sudah review CTL)'
+            : 'Approved (tanpa review CTL)';
+    }
+
+    if ($this->status === 'submitted') {
+        return $this->is_reviewed_by_ctl
+            ? 'Menunggu approval Kaprodi (sudah review CTL)'
+            : 'Menunggu proses (belum review CTL)';
+    }
+
+    if ($this->status === 'revision_required') {
+        return 'Perlu revisi (menunggu perbaikan dosen)';
+    }
+
+    if ($this->status === 'revision_submitted') {
+        return 'Revisi dikirim, menunggu proses berikutnya';
+    }
+
+    return ucfirst($this->status);
+}
+public function approvals()
+{
+    return $this->hasMany(Approval::class);
+}
+
+public function latestApproval()
+{
+    return $this->hasOne(Approval::class)->latestOfMany();
+}
+public function reviews()
+{
+    return $this->hasMany(Review::class);
+}
 
 }
