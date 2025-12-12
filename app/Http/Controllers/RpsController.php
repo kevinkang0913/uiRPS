@@ -3,6 +3,10 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use App\Models\{
     Rps, RpsPlo, RpsOutcome, RpsSubClo,
     RpsAssessmentCategory, RpsAssessmentMapping, RpsAssessment,
@@ -11,187 +15,394 @@ use App\Models\{
 
 class RpsController extends Controller
 {
+    use AuthorizesRequests;
     /* ============================================================
      * INDEX — daftar RPS
      * ============================================================ */
         public function startNew(Request $request)
         {
-            // Buang RPS yang sebelumnya ada di wizard
+            $user = $request->user();
+
+            // ✅ yang biasanya bikin RPS baru: Admin Fakultas / Super Admin
+            // ✅ dosen tetap boleh (opsional), tapi nanti UI bisa disembunyikan
+            abort_unless(
+                $user && $user->hasAnyRole(['Super Admin', 'Admin', 'Dosen']),
+                403
+            );
+
             $request->session()->forget('rps_id');
-
-            // Kalau mau, bisa juga reset flash lain dsb.
-            // $request->session()->forget(['something']);
-
             return redirect()->route('rps.create.step', 1);
         }
 
         public function index(Request $request)
-{
-    $user = $request->user();
+        {
+            $user = $request->user();
 
-    $query = Rps::query()
-        ->with(['course.program.faculty'])
-        ->latest();
+            $query = Rps::query()
+                ->with(['course.program.faculty'])
+                ->latest();
 
-    /*
-     * ========== SCOPING BERDASARKAN ROLE ==========
-     *
-     * Super Admin   : lihat semua
-     * Admin         : hanya RPS di fakultas (dan optional prodi) dia
-     * Kaprodi       : hanya RPS di prodi (atau fakultas) dia
-     * Dosen         : RPS di prodi/fakultas dia; kalau scope kosong, fallback ke RPS yang dia submit sendiri
-     * CTL           : biarkan lihat semua (fokus di menu Review)
-     */
+            /*
+            * ========== SCOPING BERDASARKAN ROLE ==========
+            *
+            * Super Admin   : lihat semua
+            * Admin         : hanya RPS di fakultas (dan optional prodi) dia
+            * Kaprodi       : hanya RPS di prodi (atau fakultas) dia
+            * Dosen         : RPS di prodi/fakultas dia; kalau scope kosong, fallback ke RPS yang dia submit sendiri
+            * CTL           : biarkan lihat semua (fokus di menu Review)
+            */
 
-    if ($user->hasRole('Super Admin')) {
-        // no restriction
-    }
-    elseif ($user->hasRole('Admin')) {
-        // Admin fakultas → wajib punya faculty_id
-        if ($user->faculty_id) {
-            $query->whereHas('course.program', function ($q) use ($user) {
-                $q->where('faculty_id', $user->faculty_id);
+            if ($user->hasRole('Super Admin')) {
+                // no restriction
+            }
+            elseif ($user->hasRole('Admin')) {
+                // Admin fakultas → wajib punya faculty_id
+                if ($user->faculty_id) {
+                    $query->whereHas('course.program', function ($q) use ($user) {
+                        $q->where('faculty_id', $user->faculty_id);
 
-                // kalau admin di-scope sampai prodi
+                        // kalau admin di-scope sampai prodi
+                        if (!is_null($user->program_id)) {
+                            $q->where('id', $user->program_id);
+                        }
+                    });
+                } else {
+                    // admin tanpa scope fakultas → tidak lihat apa-apa
+                    $query->whereRaw('1 = 0');
+                }
+            }
+            elseif ($user->hasRole('Kaprodi')) {
                 if (!is_null($user->program_id)) {
-                    $q->where('id', $user->program_id);
+                    // Kaprodi prodi tertentu
+                    $query->whereHas('course', function ($q) use ($user) {
+                        $q->where('program_id', $user->program_id);
+                    });
+                } elseif ($user->faculty_id) {
+                    // fallback: kaprodi di-scope fakultas
+                    $query->whereHas('course.program', function ($q) use ($user) {
+                        $q->where('faculty_id', $user->faculty_id);
+                    });
+                }
+            }
+            elseif ($user->hasRole('Dosen')) {
+                // ✅ DOSEN: hanya boleh lihat RPS untuk course yang di-assign ke dia (pivot course_lecturers)
+                $query->whereIn('course_id', function ($sub) use ($user) {
+                    $sub->select('course_id')
+                        ->from('course_lecturers')
+                        ->where('user_id', $user->id);
+                });
+
+            }
+
+            // else: CTL atau role lain → biarin akses full index, tapi operasi review tetap lewat menu Review
+
+            /*
+            * ========== SEARCH & FILTER STATUS (sama seperti versi kamu) ==========
+            */
+            $search = $request->string('q')->toString();
+            if ($search !== '') {
+                $query->where(function($w) use ($search) {
+                    $w->where('title','like',"%{$search}%")
+                    ->orWhereHas('course', function($c) use ($search) {
+                        $c->where('name','like',"%{$search}%")
+                            ->orWhere('code','like',"%{$search}%");
+                    });
+                });
+            }
+
+            $status = $request->string('status')->toString();
+            if ($status !== '') {
+                $query->where('status',$status);
+            }
+
+            return view('rps.index', [
+                'rpsList' => $query->paginate(12)->withQueryString(),
+                'filters' => [
+                    'q'      => $search,
+                    'status' => $status,
+                ],
+            ]);
+        }
+        public function show(Rps $rps)
+        {
+            $this->authorize('view', $rps);
+            // load relasi dasar untuk header
+            $rps->load([
+                'course.program.faculty',
+                'plos' => fn($q) => $q->orderBy('order_no'),
+                'plos.outcomes' => fn($q) => $q->orderBy('no'),
+                'plos.outcomes.subClos' => fn($q) => $q->orderBy('no'),
+                'contract',
+            ]);
+
+            // CPMK flat + sub-CPMK (dipakai di beberapa bagian view)
+            $clos = $rps->outcomesFlat()
+                ->with(['subClos' => fn($q) => $q->orderBy('no')])
+                ->orderBy('no')
+                ->get();
+
+            // kategori assessment + matriks bobot
+            $cats = RpsAssessmentCategory::orderBy('order_no')->get();
+
+            $assessments = $rps->assessments()
+                ->get()
+                ->keyBy('assessment_category_id'); // id => RpsAssessment
+
+            $matrix = RpsAssessmentMapping::where('rps_id', $rps->id)
+                ->get()
+                ->groupBy(['assessment_category_id', 'outcome_id']);
+                // akses di blade: $matrix[$catId][$cloId]->first()->percent ?? 0
+
+            // RPM (weekly plans) + referensi
+            $plans = $rps->weeklyPlans()
+                ->with([
+                    'subClo.outcome',
+                    'reference',
+                    'activities' => fn($q) => $q->orderBy('mode')->orderBy('order_no'),
+                ])
+                ->orderBy('week_no')
+                ->orderBy('order_no')
+                ->get();
+
+            // susun per minggu untuk tampilan
+            $weeks = $plans->groupBy('week_no')->map(function ($rows, $weekNo) {
+                $first = $rows->first();
+
+                return [
+                    'week_no'              => (int) $weekNo,
+                    'session_no'           => $first->session_no,
+                    'topic'                => $first->topic,
+                    'indicator'            => $first->indicator,
+                    'assessment_technique' => $first->assessment_technique,
+                    'assessment_criteria'  => $first->assessment_criteria,
+                    'learning_in'          => $first->learning_in,
+                    'learning_online'      => $first->learning_online,
+                    'reference'            => $first->reference,
+                    'items'                => $rows, // semua sub-CPMK per minggu
+                    'weight_total'         => (float) $rows->sum('weight_percent'),
+                ];
+            })->values();
+
+            $contract = $rps->contract; // boleh null
+
+            return view('rps.show', [
+                'rps'         => $rps,
+                'plos'        => $rps->plos,
+                'clos'        => $clos,
+                'cats'        => $cats,
+                'assessments' => $assessments,
+                'matrix'      => $matrix,
+                'weeks'       => $weeks,
+                'contract'    => $contract,
+            ]);
+        }
+        public function cloneForm(Request $request, Rps $rps)
+{
+    $this->authorize('clone', $rps);
+
+    return view('rps.clone', [
+        'rps' => $rps,
+    ]);
+}
+
+public function cloneStore(Request $request, Rps $rps)
+{
+    $this->authorize('clone', $rps);
+
+    $data = $request->validate([
+        'academic_year' => ['required','string','max:20'],
+        'semester'      => ['required','integer','min:1','max:14'],
+    ]);
+
+    $new = DB::transaction(function () use ($rps, $data) {
+
+        $rps->loadMissing([
+            'course',
+            'plos.outcomes.subClos',
+            'assessments',
+            'assessmentMappings',
+            'references',
+            'weeklyPlans.activities',
+            'contract',
+        ]);
+
+        // tentukan version_group
+        $group = $rps->version_group ?: ('RPS-'.$rps->course_id.'-'.$rps->id);
+
+        // version_no = max+1
+        $max = \App\Models\Rps::where('version_group', $group)->max('version_no') ?? 1;
+        $nextVersion = (int)$max + 1;
+
+        // mark old current false (optional)
+        \App\Models\Rps::where('version_group', $group)->update(['is_current' => false]);
+
+        // clone header
+        $newRps = $rps->replicate();
+        $newRps->status          = 'draft';
+        $newRps->academic_year   = $data['academic_year'];
+        $newRps->semester        = (int)$data['semester'];
+        $newRps->cloned_from_id  = $rps->id;
+        $newRps->version_group   = $group;
+        $newRps->version_no      = $nextVersion;
+        $newRps->is_current      = true;
+
+        // penting: jangan ikut timestamp lama
+        $newRps->created_at = now();
+        $newRps->updated_at = now();
+
+        $newRps->save();
+
+        // ====== COPY PLO/CLO/SubCLO ======
+        $ploMap = [];  // old_plo_id => new_plo_id
+        $cloMap = [];  // old_clo_id => new_clo_id
+        $subMap = [];  // old_sub_id => new_sub_id
+
+        foreach ($rps->plos as $plo) {
+            $newPlo = $plo->replicate();
+            $newPlo->rps_id = $newRps->id;
+            $newPlo->created_at = now();
+            $newPlo->updated_at = now();
+            $newPlo->save();
+
+            $ploMap[$plo->id] = $newPlo->id;
+
+            foreach ($plo->outcomes as $clo) {
+                $newClo = $clo->replicate();
+                $newClo->rps_id = $newRps->id;
+                $newClo->plo_id = $newPlo->id; // kalau ada kolom plo_id (umumnya ada)
+                $newClo->created_at = now();
+                $newClo->updated_at = now();
+                $newClo->save();
+
+                $cloMap[$clo->id] = $newClo->id;
+
+                foreach ($clo->subClos as $sub) {
+                    $newSub = $sub->replicate();
+                    $newSub->rps_id = $newRps->id;
+                    $newSub->outcome_id = $newClo->id; // kalau FK-nya outcome_id
+                    $newSub->created_at = now();
+                    $newSub->updated_at = now();
+                    $newSub->save();
+
+                    $subMap[$sub->id] = $newSub->id;
+                }
+            }
+        }
+
+        // ====== COPY ASSESSMENTS ======
+        if (method_exists($rps, 'assessments')) {
+            foreach ($rps->assessments as $a) {
+                $na = $a->replicate();
+                $na->rps_id = $newRps->id;
+                $na->created_at = now();
+                $na->updated_at = now();
+                $na->save();
+            }
+        } else {
+            // fallback jika relasi tidak ada, tapi model RpsAssessment ada
+            \App\Models\RpsAssessment::where('rps_id', $rps->id)->get()
+                ->each(function ($a) use ($newRps) {
+                    $na = $a->replicate();
+                    $na->rps_id = $newRps->id;
+                    $na->created_at = now();
+                    $na->updated_at = now();
+                    $na->save();
+                });
+        }
+
+        // ====== COPY ASSESSMENT MAPPING (kategori x CPMK) ======
+        \App\Models\RpsAssessmentMapping::where('rps_id', $rps->id)->get()
+            ->each(function ($m) use ($newRps, $cloMap) {
+                $nm = $m->replicate();
+                $nm->rps_id = $newRps->id;
+                // map outcome_id ke clo baru
+                if (isset($cloMap[$m->outcome_id])) {
+                    $nm->outcome_id = $cloMap[$m->outcome_id];
+                }
+                $nm->created_at = now();
+                $nm->updated_at = now();
+                $nm->save();
+            });
+
+        // ====== COPY REFERENCES ======
+        \App\Models\RpsReference::where('rps_id', $rps->id)->get()
+            ->each(function ($ref) use ($newRps) {
+                $nr = $ref->replicate();
+                $nr->rps_id = $newRps->id;
+                $nr->created_at = now();
+                $nr->updated_at = now();
+                $nr->save();
+            });
+
+        // ambil map reference_id lama -> baru (untuk weekly plan)
+        $refMap = \App\Models\RpsReference::where('rps_id', $rps->id)->orderBy('order_no')->get()
+            ->pluck('id','order_no'); // old: order_no => old_id
+
+        $newRefs = \App\Models\RpsReference::where('rps_id', $newRps->id)->orderBy('order_no')->get()
+            ->pluck('id','order_no'); // new: order_no => new_id
+
+        $refIdMap = [];
+        foreach ($refMap as $orderNo => $oldId) {
+            $newId = $newRefs[$orderNo] ?? null;
+            if ($newId) $refIdMap[$oldId] = $newId;
+        }
+
+        // ====== COPY WEEKLY PLANS + ACTIVITIES ======
+        \App\Models\RpsWeeklyPlan::where('rps_id', $rps->id)
+            ->orderBy('week_no')->orderBy('order_no')
+            ->get()
+            ->each(function ($wp) use ($newRps, $subMap, $refIdMap) {
+                $nwp = $wp->replicate();
+                $nwp->rps_id = $newRps->id;
+
+                // map sub_clo_id ke sub baru
+                if (isset($subMap[$wp->sub_clo_id])) {
+                    $nwp->sub_clo_id = $subMap[$wp->sub_clo_id];
+                }
+
+                // map reference_id (kalau ada)
+                if ($wp->reference_id && isset($refIdMap[$wp->reference_id])) {
+                    $nwp->reference_id = $refIdMap[$wp->reference_id];
+                }
+
+                $nwp->created_at = now();
+                $nwp->updated_at = now();
+                $nwp->save();
+
+                // copy activities kalau ada relasi/table
+                if (method_exists($wp, 'activities')) {
+                    foreach ($wp->activities as $act) {
+                        $na = $act->replicate();
+                        $na->rps_id = $newRps->id;
+                        $na->weekly_plan_id = $nwp->id; // sesuaikan nama FK kalau beda
+                        $na->created_at = now();
+                        $na->updated_at = now();
+                        $na->save();
+                    }
                 }
             });
-        } else {
-            // admin tanpa scope fakultas → tidak lihat apa-apa
-            $query->whereRaw('1 = 0');
-        }
-    }
-    elseif ($user->hasRole('Kaprodi')) {
-        if (!is_null($user->program_id)) {
-            // Kaprodi prodi tertentu
-            $query->whereHas('course', function ($q) use ($user) {
-                $q->where('program_id', $user->program_id);
-            });
-        } elseif ($user->faculty_id) {
-            // fallback: kaprodi di-scope fakultas
-            $query->whereHas('course.program', function ($q) use ($user) {
-                $q->where('faculty_id', $user->faculty_id);
-            });
-        }
-    }
-    elseif ($user->hasRole('Dosen')) {
-        if (!is_null($user->program_id)) {
-            // dosen di-scope prodi
-            $query->whereHas('course', function ($q) use ($user) {
-                $q->where('program_id', $user->program_id);
-            });
-        } elseif ($user->faculty_id) {
-            // fallback: scope fakultas
-            $query->whereHas('course.program', function ($q) use ($user) {
-                $q->where('faculty_id', $user->faculty_id);
-            });
-        } else {
-            // kalau belum di-assign fakultas/prodi → minimal hanya lihat RPS yang dia submit sendiri
-            $query->where('submitted_by', $user->id);
-        }
-    }
-    // else: CTL atau role lain → biarin akses full index, tapi operasi review tetap lewat menu Review
 
-    /*
-     * ========== SEARCH & FILTER STATUS (sama seperti versi kamu) ==========
-     */
-    $search = $request->string('q')->toString();
-    if ($search !== '') {
-        $query->where(function($w) use ($search) {
-            $w->where('title','like',"%{$search}%")
-              ->orWhereHas('course', function($c) use ($search) {
-                  $c->where('name','like',"%{$search}%")
-                    ->orWhere('code','like',"%{$search}%");
-              });
-        });
-    }
+        // ====== COPY CONTRACT ======
+        if ($rps->contract) {
+            $nc = $rps->contract->replicate();
+            $nc->rps_id = $newRps->id;
+            $nc->created_at = now();
+            $nc->updated_at = now();
+            $nc->save();
+        }
 
-    $status = $request->string('status')->toString();
-    if ($status !== '') {
-        $query->where('status',$status);
-    }
+        return $newRps;
+    });
 
-    return view('rps.index', [
-        'rpsList' => $query->paginate(12)->withQueryString(),
-        'filters' => [
-            'q'      => $search,
-            'status' => $status,
-        ],
-    ]);
+    // setelah clone, masuk ke wizard untuk diedit (step 1 atau auto-resume)
+    // karena ini “clone”, biasanya langsung ke step 2/3, tapi aman pakai resumeAuto
+    $request->session()->put('rps_id', $new->id);
+
+    return redirect()
+        ->route('rps.resume.auto', $new)
+        ->with('success', "RPS berhasil di-clone (Version {$new->version_no}). Silakan lanjutkan edit.");
 }
-public function show(Rps $rps)
-{
-    // load relasi dasar untuk header
-    $rps->load([
-        'course.program.faculty',
-        'plos' => fn($q) => $q->orderBy('order_no'),
-        'plos.outcomes' => fn($q) => $q->orderBy('no'),
-        'plos.outcomes.subClos' => fn($q) => $q->orderBy('no'),
-        'contract',
-    ]);
 
-    // CPMK flat + sub-CPMK (dipakai di beberapa bagian view)
-    $clos = $rps->outcomesFlat()
-        ->with(['subClos' => fn($q) => $q->orderBy('no')])
-        ->orderBy('no')
-        ->get();
-
-    // kategori assessment + matriks bobot
-    $cats = RpsAssessmentCategory::orderBy('order_no')->get();
-
-    $assessments = $rps->assessments()
-        ->get()
-        ->keyBy('assessment_category_id'); // id => RpsAssessment
-
-    $matrix = RpsAssessmentMapping::where('rps_id', $rps->id)
-        ->get()
-        ->groupBy(['assessment_category_id', 'outcome_id']);
-        // akses di blade: $matrix[$catId][$cloId]->first()->percent ?? 0
-
-    // RPM (weekly plans) + referensi
-    $plans = $rps->weeklyPlans()
-        ->with([
-            'subClo.outcome',
-            'reference',
-            'activities' => fn($q) => $q->orderBy('mode')->orderBy('order_no'),
-        ])
-        ->orderBy('week_no')
-        ->orderBy('order_no')
-        ->get();
-
-    // susun per minggu untuk tampilan
-    $weeks = $plans->groupBy('week_no')->map(function ($rows, $weekNo) {
-        $first = $rows->first();
-
-        return [
-            'week_no'              => (int) $weekNo,
-            'session_no'           => $first->session_no,
-            'topic'                => $first->topic,
-            'indicator'            => $first->indicator,
-            'assessment_technique' => $first->assessment_technique,
-            'assessment_criteria'  => $first->assessment_criteria,
-            'learning_in'          => $first->learning_in,
-            'learning_online'      => $first->learning_online,
-            'reference'            => $first->reference,
-            'items'                => $rows, // semua sub-CPMK per minggu
-            'weight_total'         => (float) $rows->sum('weight_percent'),
-        ];
-    })->values();
-
-    $contract = $rps->contract; // boleh null
-
-    return view('rps.show', [
-        'rps'         => $rps,
-        'plos'        => $rps->plos,
-        'clos'        => $clos,
-        'cats'        => $cats,
-        'assessments' => $assessments,
-        'matrix'      => $matrix,
-        'weeks'       => $weeks,
-        'contract'    => $contract,
-    ]);
-}
 
     /* ============================================================
      * CREATE STEP — menampilkan tiap halaman step
@@ -200,7 +411,9 @@ public function show(Rps $rps)
     {
         $rpsId = $request->session()->get('rps_id');
         $rps   = $rpsId ? Rps::find($rpsId) : null;
-
+        if ($rps) {
+        $this->authorize('update', $rps);
+    }
         /* ---------- STEP 1 ---------- */
         if ($step === 1) {
             return view('rps.steps.identitas', compact('rps'));
@@ -561,7 +774,7 @@ TXT;
 /* ---------- STEP 2 ---------- */
 if ($step === 2) {
     $rps = Rps::findOrFail($request->session()->get('rps_id'));
-
+    $this->authorize('update', $rps);
     // Pastikan kategori assessment ada
     if (RpsAssessmentCategory::count() === 0) {
         RpsAssessmentCategory::insert([
@@ -800,6 +1013,7 @@ if ($request->boolean('exit_to_index')) {
 /* ---------- STEP 3 ---------- */
 if ($step === 3) {
     $rps  = Rps::findOrFail($request->session()->get('rps_id'));
+    $this->authorize('update', $rps);
     $cats = RpsAssessmentCategory::orderBy('order_no')->get(['id']);
 
     // Ambil CPMK + bobot global dari Step 2
@@ -890,7 +1104,7 @@ if ($step === 3) {
        /* ---------- STEP 4 (REFERENSI) ---------- */
 if ($step === 4) {
     $rps = Rps::findOrFail($request->session()->get('rps_id'));
-
+    $this->authorize('update', $rps);
     // Validasi input
     $data = $request->validate([
         'refs'           => ['required','array','min:1'],
@@ -1007,7 +1221,7 @@ if ($step === 5) {
 if ($step === 5) {
     $rpsId = $request->session()->get('rps_id');
     $rps   = Rps::findOrFail($rpsId);
-
+    $this->authorize('update', $rps);
     // Validasi form
     $data = $request->validate([
         'weeks'                           => ['required','array','min:1'],
@@ -1127,7 +1341,7 @@ if ($step === 5) {
 if ($step === 6) {
 
     $rps = Rps::findOrFail($request->session()->get('rps_id'));
-
+    $this->authorize('update', $rps);
     $data = $request->validate([
         'class_policy'   => ['nullable','string'],
         'contract_text'  => ['required','string'],
@@ -1163,56 +1377,29 @@ $rps->save();
         abort(404);
     }
     public function resume(Request $request, Rps $rps, int $step = 1)
-{
-    // Simpan RPS yang mau diedit ke session,
-    // supaya createStep() dan storeStep() tahu sedang mengerjakan RPS mana.
-    $request->session()->put('rps_id', $rps->id);
+    {
+        $this->authorize('update', $rps);
 
-    // Optional: kalau kamu mau kunci hanya status draft yang boleh diedit:
-    // if ($rps->status !== 'draft') {
-    //     return redirect()->route('rps.index')
-    //         ->with('error', 'RPS dengan status ini tidak dapat diedit.');
-    // }
-
-    // Arahkan ke step yang diminta (1, 2, 3, dst.)
-    return redirect()->route('rps.create.step', $step);
-}
-
-public function resumeAuto(Request $request, Rps $rps)
-{
-    // Simpan rps_id ke session (supaya createStep / storeStep tahu RPS mana)
-    $request->session()->put('rps_id', $rps->id);
-
-    // Default: mulai dari Step 1
-    $step = 1;
-
-    // Kalau sudah punya CPL/CPMK → minimal Step 2
-    if ($rps->plos()->exists()) {
-        $step = 2;
+        $request->session()->put('rps_id', $rps->id);
+        return redirect()->route('rps.create.step', $step);
     }
 
-    // Kalau sudah punya matriks assessment → minimal Step 3
-    if ($rps->assessments()->exists()) {
-        $step = 3;
-    }
 
-    // Kalau sudah punya referensi → minimal Step 4
-    if ($rps->references()->exists()) {
-        $step = 4;
-    }
+    public function resumeAuto(Request $request, Rps $rps)
+    {
+        $this->authorize('update', $rps);
 
-    // Kalau sudah punya RPM (weekly plans) → minimal Step 5
-    if ($rps->weeklyPlans()->exists()) {
-        $step = 5;
-    }
+        $request->session()->put('rps_id', $rps->id);
 
-    // Kalau sudah punya kontrak → Step 6 (final)
-    if ($rps->contract()->exists()) {
-        $step = 6;
-    }
+        $step = 1;
+        if ($rps->plos()->exists())        $step = 2;
+        if ($rps->assessments()->exists()) $step = 3;
+        if ($rps->references()->exists())  $step = 4;
+        if ($rps->weeklyPlans()->exists()) $step = 5;
+        if ($rps->contract()->exists())    $step = 6;
 
-    return redirect()->route('rps.create.step', $step);
-}
+        return redirect()->route('rps.create.step', $step);
+    }
 
 
     public function editCplCpmk(Rps $rps)

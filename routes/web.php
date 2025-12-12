@@ -57,6 +57,8 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/rps/{rps}/show', [RpsController::class, 'show'])
         ->name('rps.show');
+    Route::get('/rps/{rps}/clone', [RpsController::class, 'cloneForm'])->name('rps.clone.form');
+Route::post('/rps/{rps}/clone', [RpsController::class, 'cloneStore'])->name('rps.clone.store');
 
     /*
     |--------------------------------------------------------------------------
@@ -172,9 +174,15 @@ Route::middleware('auth')->group(function () {
         | Master Data (CRUD)
         |--------------------------------------------------------------------------
         */
-        Route::resource('faculties',      FacultyController::class);
-        Route::resource('programs',       ProgramController::class);
-        Route::resource('courses',        CourseController::class);
+        Route::resource('faculties', FacultyController::class);
+        Route::resource('programs', ProgramController::class);
+        Route::resource('courses', CourseController::class);
+        Route::get('courses/{course}/lecturers', [CourseController::class, 'lecturers'])
+            ->name('courses.lecturers');
+        Route::post('courses/{course}/lecturers', [CourseController::class, 'storeLecturer'])
+            ->name('courses.lecturers.store');
+        Route::delete('courses/{course}/lecturers/{user}', [CourseController::class, 'removeLecturer'])
+            ->name('courses.lecturers.destroy');
         Route::resource('class-sections', ClassSectionController::class);
 
         /*

@@ -109,12 +109,23 @@
               <td>{{ $c->program?->name }}</td>
               <td>{{ $c->program?->faculty?->name }}</td>
               <td class="text-end">
-                <a href="{{ route('courses.edit', $c) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
-                <form action="{{ route('courses.destroy', $c) }}" method="POST" class="d-inline" onsubmit="return confirm('Delete this course?')">
-                  @csrf @method('DELETE')
-                  <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                </form>
-              </td>
+              {{-- Assign Dosen --}}
+              <a href="{{ route('courses.lecturers', $c) }}"
+                class="btn btn-sm btn-outline-primary"
+                title="Assign Dosen">
+                <i class="bi bi-people"></i>
+              </a>
+              <a href="{{ route('courses.edit', $c) }}" class="btn btn-sm btn-outline-secondary" title="Edit">
+                <i class="bi bi-pencil"></i>
+              </a>
+              <form action="{{ route('courses.destroy', $c) }}" method="POST" class="d-inline"
+                    onsubmit="return confirm('Delete this course?')">
+                @csrf @method('DELETE')
+                <button class="btn btn-sm btn-outline-danger" title="Delete">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </td>
             </tr>
           @empty
             <tr><td colspan="7" class="text-center text-muted py-4">No data</td></tr>

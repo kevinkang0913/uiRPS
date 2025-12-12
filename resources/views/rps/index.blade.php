@@ -147,9 +147,15 @@
                 </div>
                 <div class="text-muted small">
                   {{ $item->course->code ?? '—' }}
+                  {{-- Version badge --}}
+                  <span class="ms-1 badge bg-secondary">
+                    v{{ $item->version_no ?? 1 }}
+                  </span>
+                  @if($item->is_current)
+                    <span class="ms-1 badge bg-success">Current</span>
+                  @endif
                 </div>
               </td>
-
               <td>
                 <span class="status-badge {{ $statusClass }}">
                   {{ $statusLabel }}
@@ -170,18 +176,24 @@
               <td>{{ $item->created_at?->format('d M Y') }}</td>
 
               <td class="text-end">
-                {{-- Tombol Show --}}
-                <a href="{{ route('rps.show', $item) }}"
-                   class="btn btn-sm btn-outline-secondary">
-                  <i class="bi bi-eye"></i> Lihat
+              {{-- Tombol Show --}}
+              <a href="{{ route('rps.show', $item) }}"
+                class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-eye"></i> Lihat
+              </a>
+              {{-- Tombol Clone --}}
+              @can('clone', $item)
+                <a href="{{ route('rps.clone.form', $item) }}"
+                  class="btn btn-sm btn-outline-primary">
+                  <i class="bi bi-copy"></i> Clone
                 </a>
-
-                {{-- Tombol Lanjutkan (resume wizard) --}}
-                <a href="{{ route('rps.resume.auto', $item) }}"
-                   class="btn btn-sm btn-outline-primary">
-                  Lanjutkan
-                </a>
-              </td>
+              @endcan
+              {{-- Tombol Lanjutkan (resume wizard) --}}
+              <a href="{{ route('rps.resume.auto', $item) }}"
+                class="btn btn-sm btn-outline-primary">
+                Lanjutkan
+              </a>
+            </td>
             </tr>
           @endforeach
           </tbody>

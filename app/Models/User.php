@@ -104,4 +104,15 @@ public function program()
     return $this->belongsTo(\App\Models\Program::class);
 }
 
+public function coursesTaught()
+{
+    return $this->belongsToMany(\App\Models\Course::class, 'course_lecturers', 'user_id', 'course_id')
+        ->withPivot(['can_edit', 'is_responsible'])
+        ->withTimestamps();
+}
+
+public function editableCourses()
+{
+    return $this->coursesTaught()->wherePivot('can_edit', 1);
+}
 }
