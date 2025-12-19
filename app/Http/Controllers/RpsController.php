@@ -227,14 +227,15 @@ public function cloneStore(Request $request, Rps $rps)
         ]);
 
         // tentukan version_group
-        $group = $rps->version_group ?: ('RPS-'.$rps->course_id.'-'.$rps->id);
+        // ✅ 1 course = 1 version_group (konsisten)
+        $group = 'COURSE-' . $rps->course_id;
 
-        // version_no = max+1
-        $max = \App\Models\Rps::where('version_group', $group)->max('version_no') ?? 1;
+        // ✅ version_no naik berdasarkan course (bukan berdasarkan group yg bisa kacau)
+        $max = \App\Models\Rps::where('course_id', $rps->course_id)->max('version_no') ?? 0;
         $nextVersion = (int)$max + 1;
 
-        // mark old current false (optional)
-        \App\Models\Rps::where('version_group', $group)->update(['is_current' => false]);
+        // ✅ HARD RULE: hanya 1 current per course
+        \App\Models\Rps::where('course_id', $rps->course_id)->update(['is_current' => false]);
 
         // clone header
         $newRps = $rps->replicate();

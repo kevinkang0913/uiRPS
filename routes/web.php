@@ -17,7 +17,8 @@ use App\Http\Controllers\CourseController;
 use App\Http\Controllers\ClassSectionController;
 use App\Http\Controllers\AcademicApiController;
 use App\Http\Controllers\Admin\ImportController;
-
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ImportDosenController;
 /*
 |--------------------------------------------------------------------------
 | Public
@@ -26,9 +27,14 @@ use App\Http\Controllers\Admin\ImportController;
 Route::get('/', fn () => view('welcome'));
 
 // Dashboard (login + verified)
-Route::get('/dashboard', fn () => view('dashboard'))
+Route::get('/dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'verified'])
     ->name('dashboard');
+Route::middleware('auth')->group(function () {
+    Route::get('/pending-role', function () {
+        return view('auth.pending-role');
+    })->name('pending-role');
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -45,7 +51,14 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    Route::get('/import/dosen', [ImportDosenController::class, 'form'])
+        ->name('import.dosen.form');
 
+    Route::post('/import/dosen/preview', [ImportDosenController::class, 'preview'])
+        ->name('import.dosen.preview');
+
+    Route::post('/import/dosen/process', [ImportDosenController::class, 'process'])
+        ->name('import.dosen.process');
     /*
     |--------------------------------------------------------------------------
     | RPS INDEX + SHOW
@@ -66,7 +79,7 @@ Route::post('/rps/{rps}/clone', [RpsController::class, 'cloneStore'])->name('rps
     |   → hanya mereka yang boleh create / edit RPS
     |--------------------------------------------------------------------------
     */
-    Route::middleware('role:Dosen,Super Admin')->group(function () {
+    Route::middleware('role:Dosen,Super Admin, Admin')->group(function () {
 
         // Mulai RPS baru (reset wizard)
         Route::get('/rps/create', [RpsController::class, 'startNew'])

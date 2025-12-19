@@ -12,7 +12,13 @@
       font-weight: 600;
       padding: 0.3rem 0.85rem;
       text-transform: capitalize;
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      line-height: 1;
+      white-space: nowrap;
     }
+
     /* Palet kira-kira UPH: navy, gold, hijau, merah */
 
     /* status: draft */
@@ -56,8 +62,11 @@
       border-radius: 999px;
       font-size: 0.7rem;
       padding: 0.18rem 0.55rem;
-      margin-left: 0.25rem;
       font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      line-height: 1;
+      white-space: nowrap;
     }
     .badge-ctl-reviewed {
       background: #e5f6ea;
@@ -68,6 +77,31 @@
       background: #f1f3f5;
       color: #6c757d;
       border: 1px solid #dde2e6;
+    }
+
+    /* wrap untuk status + flag biar rapi */
+    .status-wrap{
+      display:flex;
+      flex-wrap:wrap;
+      gap:.4rem;
+      align-items:center;
+    }
+
+    /* kalau teks badge kepanjangan → jadi "..." */
+    .badge-trunc{
+      max-width: 170px; /* adjust kalau mau lebih lebar */
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      display:inline-block;
+      vertical-align:middle;
+    }
+
+    /* tombol icon biar rapih */
+    .btn-icon{
+      display:inline-flex;
+      align-items:center;
+      gap:.35rem;
     }
   </style>
 
@@ -124,9 +158,9 @@
             <tr>
               <th style="width:80px">ID</th>
               <th>Course</th>
-              <th style="width:220px">Status</th>
+              <th style="width:260px">Status</th>
               <th style="width:160px">Dibuat</th>
-              <th class="text-end" style="width:160px">Aksi</th>
+              <th class="text-end" style="width:210px">Aksi</th>
             </tr>
           </thead>
           <tbody>
@@ -156,44 +190,61 @@
                   @endif
                 </div>
               </td>
-              <td>
-                <span class="status-badge {{ $statusClass }}">
-                  {{ $statusLabel }}
-                </span>
 
-                {{-- Penanda sudah / belum direview CTL --}}
-                @if($item->is_reviewed_by_ctl)
-                  <span class="badge-ctl-flag badge-ctl-reviewed">
-                    Reviewed CTL
+              <td>
+                <div class="status-wrap">
+                  <span class="status-badge {{ $statusClass }} badge-trunc"
+                        title="{{ $statusLabel }}">
+                    {{ $statusLabel }}
                   </span>
-                @else
-                  <span class="badge-ctl-flag badge-ctl-not-reviewed">
-                    Belum review CTL
-                  </span>
-                @endif
+
+                  {{-- Penanda sudah / belum direview CTL --}}
+                  @if($item->is_reviewed_by_ctl)
+                    <span class="badge-ctl-flag badge-ctl-reviewed badge-trunc"
+                          title="Reviewed CTL">
+                      Reviewed CTL
+                    </span>
+                  @else
+                    <span class="badge-ctl-flag badge-ctl-not-reviewed badge-trunc"
+                          title="Belum review CTL">
+                      Belum review CTL
+                    </span>
+                  @endif
+                </div>
               </td>
 
               <td>{{ $item->created_at?->format('d M Y') }}</td>
 
               <td class="text-end">
-              {{-- Tombol Show --}}
-              <a href="{{ route('rps.show', $item) }}"
-                class="btn btn-sm btn-outline-secondary">
-                <i class="bi bi-eye"></i> Lihat
-              </a>
-              {{-- Tombol Clone --}}
-              @can('clone', $item)
-                <a href="{{ route('rps.clone.form', $item) }}"
-                  class="btn btn-sm btn-outline-primary">
-                  <i class="bi bi-copy"></i> Clone
-                </a>
-              @endcan
-              {{-- Tombol Lanjutkan (resume wizard) --}}
-              <a href="{{ route('rps.resume.auto', $item) }}"
-                class="btn btn-sm btn-outline-primary">
-                Lanjutkan
-              </a>
-            </td>
+                <div class="d-inline-flex gap-2">
+
+                  {{-- Tombol Show --}}
+                  <a href="{{ route('rps.show', $item) }}"
+                     class="btn btn-sm btn-outline-secondary btn-icon">
+                    <i class="bi bi-eye"></i>
+                    <span class="d-none d-md-inline">Lihat</span>
+                  </a>
+
+                  {{-- Tombol Clone --}}
+                  @can('clone', $item)
+                    <a href="{{ route('rps.clone.form', $item) }}"
+                       class="btn btn-sm btn-outline-primary btn-icon">
+                      <i class="bi bi-copy"></i>
+                      <span class="d-none d-md-inline">Clone</span>
+                    </a>
+                  @endcan
+
+                  {{-- Tombol Lanjutkan (resume wizard / edit current) --}}
+                  @if($item->is_current)
+                    <a href="{{ route('rps.resume.auto', $item) }}"
+                       class="btn btn-sm btn-primary btn-icon">
+                      <i class="bi bi-pencil-square"></i>
+                      <span class="d-none d-md-inline">Lanjutkan</span>
+                    </a>
+                  @endif
+
+                </div>
+              </td>
             </tr>
           @endforeach
           </tbody>

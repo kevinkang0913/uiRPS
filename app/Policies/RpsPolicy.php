@@ -52,6 +52,10 @@ class RpsPolicy
             ->where('courses.id', $rps->course_id)
             ->wherePivot('can_edit', 1)
             ->exists();
+            if (! $rps->is_current) {
+    return false;
+}
+
     }
 
     public function submit(User $user, Rps $rps): bool

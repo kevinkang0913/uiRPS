@@ -766,7 +766,10 @@
 
       const type = typeSel ? typeSel.value.trim() : '';
       const dur  = durInp ? durInp.value.trim() : '';
-      const desc = descTa ? descTa.value.trim() : '';
+      const desc = descTa
+  ? descTa.value.replace(/\r\n|\n|\r/g, ' ').trim()
+  : '';
+
 
       if (!type && !dur && !desc) return;
 

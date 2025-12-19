@@ -196,17 +196,17 @@ class ReviewController extends Controller
          */
         $rps->is_reviewed_by_ctl = 1;   // penanda sudah pernah dicek CTL
 
-if ($data['status'] === 'revisi') {
-    // CTL minta revisi → RPS balik ke dosen
-    $rps->status = 'need_revision';
-} elseif ($data['status'] === 'forwarded') {
-    // CTL setuju diteruskan ke Kaprodi
-    // Kaprodi tetap bisa approve walau CTL belum review,
-    // tapi kalau sudah diforward CTL, kita tandai sebagai 'reviewed'
-    $rps->status = 'reviewed';
-}
+        if ($data['status'] === 'revisi') {
+            // CTL minta revisi → RPS balik ke dosen
+            $rps->status = 'need_revision';
+        } elseif ($data['status'] === 'forwarded') {
+            // CTL setuju diteruskan ke Kaprodi
+            // Kaprodi tetap bisa approve walau CTL belum review,
+            // tapi kalau sudah diforward CTL, kita tandai sebagai 'reviewed'
+            $rps->status = 'reviewed';
+        }
 
-$rps->save();
+        $rps->save();
 
         return redirect()
             ->route('reviews.index')

@@ -174,12 +174,6 @@
                             <i class="bi bi-journal-text me-2"></i> Courses
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a href="{{ route('class-sections.index') }}"
-                           class="nav-link {{ request()->is('class-sections*') ? 'active' : '' }}">
-                            <i class="bi bi-collection me-2"></i> Class Sections
-                        </a>
-                    </li>
 
                     {{-- Users / Roles --}}
                     <li class="nav-item">
@@ -188,13 +182,6 @@
                             <i class="bi bi-people me-2"></i> Users
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a href="{{ route('roles.index') }}"
-                           class="nav-link {{ request()->routeIs('roles.*') ? 'active' : '' }}">
-                            <i class="bi bi-shield-lock me-2"></i> Roles
-                        </a>
-                    </li>
-
                     {{-- Activity Logs --}}
                     <li class="nav-item">
                         <a href="{{ route('activity-logs.index') }}"
